@@ -60,7 +60,7 @@ import {
   usesLocalLongMode, validateLocalMedia,
 } from '@/lib/roleplay-studio/long-media';
 import {
-  classifySpeakerRole, filterInterpreterCues,
+  classifyImportedSpeaker, filterInterpreterCues, makeNeutralSegmentTitle,
   titleAfterProfileChange, studioProfileSearchText, studioEditorialProfile, studioProfileSelection, hasStudioProfileLanguageMismatch, type StudioLanguage,
 } from '@/lib/roleplay-studio/speaker-profiles';
 
@@ -523,13 +523,16 @@ export default function RoleplayStudioPage() {
   const loadSelectedCues = (
     selected: TimedTranscriptCue[], excludedCount: number, approvedReplacement = false,
   ): boolean => {
-    const prepared: Segment[] = toPublishableStudioSegments(selected).map((segment, index) => ({
-      ...segment,
-      id: crypto.randomUUID(),
-      speakerRole: classifySpeakerRole(selected[index].speaker),
-      sourceSpeakerGroup: sourceSpeakerGroup(selected[index].speaker),
-      language: 'unknown',
-    }));
+    const prepared: Segment[] = toPublishableStudioSegments(selected).map((segment, index) => {
+      const profile = classifyImportedSpeaker(selected[index].speaker);
+      return {
+        ...segment,
+        ...profile,
+        title: profile.language === 'unknown' ? segment.title : makeNeutralSegmentTitle(profile.speakerRole, profile.language, index),
+        id: crypto.randomUUID(),
+        sourceSpeakerGroup: sourceSpeakerGroup(selected[index].speaker),
+      };
+    });
     // Importing a valid SRT/VTT can replace all existing edited cuts. Prompt
     // only when there is actual work to lose; never silently discard it.
     if ((segments.length > 0 || suggestedClips.length > 0) && !approvedReplacement && !window.confirm(
@@ -2795,6 +2798,8 @@ export default function RoleplayStudioPage() {
           </div>
           <div className="max-h-80 space-y-2 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
             {visibleCues.map(({ cue, index }) => {
+              const imported = classifyImportedSpeaker(cue.speaker);
+              const profile = studioEditorialProfile(imported.speakerRole);
               return (
               <div key={index} className="flex items-start gap-3 rounded-lg border border-[var(--border)] p-2">
                 <input type="checkbox" checked={chosenCueIndices.includes(index)}
@@ -2804,9 +2809,8 @@ export default function RoleplayStudioPage() {
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-semibold text-[var(--theme-warning)]">
                     {index + 1} · {formatTime(cue.start)}–{formatTime(cue.end)} ·
-                    {classifySpeakerRole(cue.speaker) === 'unknown'
-                      ? ' Hablante por revisar'
-                      : ` ${cue.speaker}`}
+                    {profile ? ` ${profile.label} · ${imported.language === 'unknown' ? 'Idioma por revisar' : imported.language.toUpperCase()}` : ' Hablante por revisar'}
+                    {hasStudioProfileLanguageMismatch(imported.speakerRole, imported.language) && ' · Revisar idioma del perfil'}
                     {overlappingSelectedCues.includes(index) && (
                       <span className="font-semibold text-[var(--theme-danger)]"> · Solapa otro turno seleccionado</span>
                     )}
