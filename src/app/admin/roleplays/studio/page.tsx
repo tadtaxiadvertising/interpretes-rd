@@ -44,7 +44,9 @@ import { useStudioEditorialHistory, hasRecoverableUndo, type EditorialSnapshot }
 import { canPrepareLocalMp3, decodeLocalMp3ForAssignment } from '@/lib/roleplay-studio/local-mp3-assignment';
 import { prepareLocalWavAssignment, planLocalWavParts, type LocalWavPart } from '@/lib/roleplay-studio/local-wav-assignment';
 import { studioProductionKey, productionStatus, trackProductionTransfer } from '@/lib/roleplay-studio/production-tracking';
-import { stageStudioHandoff, stageLocalWavHandoff, STUDIO_HANDOFF_MAX_BYTES } from '@/lib/roleplay-studio/assignment-handoff';
+import StudioTopicPicker from './StudioTopicPicker';
+import { parseEditorialRoleplayTopic } from '@/lib/roleplay-library-topics';
+import { stageStudioHandoff, stageLocalWavHandoff, STUDIO_HANDOFF_MAX_BYTES, type StudioTopicSelection } from '@/lib/roleplay-studio/assignment-handoff';
 import FocusTimeline from './FocusTimeline';
 import type { LocalVadSnapshot } from '@/lib/roleplay-studio/local-vad';
 import LocalVadAssistant from './LocalVadAssistant';
@@ -89,6 +91,7 @@ export default function RoleplayStudioPage() {
   const [confirmedTurns, setConfirmedTurns] = useState<ReadonlyMap<string, Segment>>(() => new Map());
   const [expandedEditor, setExpandedEditor] = useState(false);
   const [publicationPartKey, setPublicationPartKey] = useState('');
+  const [editorialTopic, setEditorialTopic] = useState<StudioTopicSelection>({ topic: '', subtopic: '' });
   const genericPublicationPlan = useMemo(() => planStudioPublicationParts(segments, duration), [segments, duration]);
   const [wavPlan, setWavPlan] = useState<{ source: File; cuts: Segment[]; parts: LocalWavPart<Segment>[]; issue: string | null } | null>(null);
   const [convertedMp3, setConvertedMp3] = useState<{ original: File; wav: File } | null>(null);
@@ -472,6 +475,7 @@ export default function RoleplayStudioPage() {
     setError('');
     setNotice('');
     resetRecoveryForSource();
+    setEditorialTopic({ topic: '', subtopic: '' });
     setSegments([]);
     setExcludedTurns([]);
     setTrashOpen(false);
@@ -3237,6 +3241,7 @@ export default function RoleplayStudioPage() {
           )}
           {!workspaceActive && error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-[var(--theme-danger)]">{error}</p>}
           {!workspaceActive && notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-[var(--theme-success)]">{notice}</p>}
+          {segments.length > 0 && <StudioTopicPicker value={editorialTopic} onChange={setEditorialTopic} disabled={busy || draftBusy || analyzingSilences}/>}
           <StudioFinalizationPanel
             segmentCount={segments.length} expandedEditor={expandedEditor}
             publicationPlan={publicationPlan} currentWavPlan={currentWavPlan} selectedPublicationPart={selectedPublicationPart}
@@ -3282,8 +3287,9 @@ export default function RoleplayStudioPage() {
                       if (recoveryEnabled && !backup && !window.confirm('No se pudo actualizar el respaldo local. La producción quedará registrada solo en esta pestaña. ¿Continuar?')) {
                         event.preventDefault(); return;
                       }
-                      if (readyAssignment.files) stageLocalWavHandoff(readyAssignment.token, readyAssignment.files);
-                      else stageStudioHandoff(readyAssignment.token, readyAssignment.file);
+                      const selection = parseEditorialRoleplayTopic(editorialTopic.topic, editorialTopic.subtopic);
+                      if (readyAssignment.files) stageLocalWavHandoff(readyAssignment.token, readyAssignment.files, selection);
+                      else stageStudioHandoff(readyAssignment.token, readyAssignment.file, selection);
                       if (key) trackProductionTransfer(readyAssignment.token, key, backup);
                     }
                     catch (cause) { event.preventDefault(); setError(cause instanceof Error ? cause.message : 'No se pudo transferir el paquete.'); }
