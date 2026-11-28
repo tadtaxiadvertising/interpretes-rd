@@ -538,6 +538,42 @@ describe('POST /api/admin/roleplays', () => {
       },
     );
 
+    it('releases the admission slot after 60 seconds of multipart inactivity before any writes', async () => {
+      const cancel = vi.fn();
+      const stalled = new Request('http://localhost/api/admin/roleplays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'multipart/form-data; boundary=synthetic' },
+        body: new ReadableStream<Uint8Array>({ cancel }),
+        duplex: 'half',
+      } as RequestInit & { duplex: 'half' });
+      vi.useFakeTimers();
+      try {
+        const pending = POST(stalled as any);
+        await vi.advanceTimersByTimeAsync(0);
+        const concurrent = await POST(buildRequest({
+          participantType: 'interpreter', participantId: '7',
+          scenarios: oneScenario, audios: [audioFile()],
+        }) as any);
+        expect(concurrent.status).toBe(503);
+        await vi.advanceTimersByTimeAsync(60_000);
+        const response = await pending;
+        expect(response.status).toBe(408);
+        expect(response.headers.get('Cache-Control')).toContain('no-store');
+        expect(cancel).toHaveBeenCalledOnce();
+        expect(mockUpload).not.toHaveBeenCalled();
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+        expect(prisma.roleplayCreationRequest.create).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+      const valid = await POST(buildRequest({
+        participantType: 'interpreter', participantId: '7',
+        scenarios: oneScenario, audios: [audioFile()],
+      }) as any);
+      expect(valid.status).toBe(200);
+      expect(mockUpload).toHaveBeenCalledOnce();
+    });
+
     it('cancels an oversized declared multipart before parsing, Storage or database work', async () => {
       const cancel = vi.fn();
       const boundary = 'synthetic-boundary';
