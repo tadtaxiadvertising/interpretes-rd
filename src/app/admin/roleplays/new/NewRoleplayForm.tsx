@@ -1167,6 +1167,8 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
               NOT_FOUND: 'Aún no hay un recibo disponible. Esto no demuestra que la creación haya fallado.',
               REVIEW_REQUIRED: 'El recibo requiere revisión. Consulta las sesiones existentes.',
               UNAVAILABLE: 'No se pudo consultar el recibo o se agotó el tiempo de espera. Conserva la referencia y vuelve a consultar; no reenvíes los audios.',
+              ACCESS_REQUIRED: 'No tienes acceso a la consulta del recibo. Guarda la referencia, comprueba que tu sesión administrativa siga activa y vuelve a consultar con la misma cuenta. No reenvíes los audios.',
+              ENDPOINT_UNAVAILABLE: 'La ruta de consulta del recibo no está disponible. Conserva la referencia y verifica la configuración del servicio con el responsable del despliegue. Esto no demuestra que la creación haya fallado.',
               COMPLETED: 'Creación confirmada mediante el recibo. Consulta la sesión existente antes de realizar otra asignación.',
             }[keyedStatus]}
           </p>
