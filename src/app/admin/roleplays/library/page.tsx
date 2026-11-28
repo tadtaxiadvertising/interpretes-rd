@@ -4,7 +4,7 @@ import prisma from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { getReusableRoleplayAudio, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
-import { ROLEPLAY_TOPICS, resolveRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic } from '@/lib/roleplay-library-topics';
+import { ROLEPLAY_TOPICS, resolveRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic, parseRoleplayLibrarySearch, matchesRoleplayLibrarySearch } from '@/lib/roleplay-library-topics';
 import RoleplayTopicsReadiness from './RoleplayTopicsReadiness';
 import { RoleplayLibraryTopicEditor } from './RoleplayLibraryTopicEditor';
 import { RoleplayLibraryVisibilityButton } from './RoleplayLibraryVisibilityButton';
@@ -94,10 +94,10 @@ async function getLibrary() {
 export default async function RoleplayLibraryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; archived?: string; topic?: string; subtopic?: string }>;
+  searchParams: Promise<{ q?: string | string[]; archived?: string | string[]; topic?: string | string[]; subtopic?: string | string[] }>;
 }) {
   const params = await searchParams;
-  const q = (params.q ?? '').trim().toLowerCase().slice(0, 100);
+  const q = parseRoleplayLibrarySearch(params.q);
   const showArchived = params.archived === '1';
   const result = await getLibrary();
   let editorialEnabled = process.env.ROLEPLAY_LIBRARY_EDITORIAL_TOPICS_ENABLED === 'true';
@@ -119,10 +119,10 @@ export default async function RoleplayLibraryPage({
     }
   }
   const { topic, subtopic } = parseRoleplayTopicFilters(params.topic, params.subtopic);
-  const searchable = result.items.filter((item) =>
-    (showArchived ? item.archivedAt !== null : item.archivedAt === null) &&
-    (!q || item.titles.some((title) => title.toLowerCase().includes(q)) || item.fingerprint.startsWith(q))
-  ).map(item => ({ ...item, editorialTopic: editorial.get(item.fingerprint) ?? null, topicHints: resolveRoleplayTopics(item.titles, editorial.get(item.fingerprint)) }));
+  const searchable = result.items.filter(item =>
+    showArchived ? item.archivedAt !== null : item.archivedAt === null
+  ).map(item => ({ ...item, editorialTopic: editorial.get(item.fingerprint) ?? null, topicHints: resolveRoleplayTopics(item.titles, editorial.get(item.fingerprint)) }))
+    .filter(item => matchesRoleplayLibrarySearch(item.titles, item.fingerprint, item.topicHints, q));
   const matches = searchable.filter(item => matchesRoleplayTopic(item.topicHints, topic, subtopic));
   const selectedTopic = ROLEPLAY_TOPICS.find(item => item.id === topic);
   const topicCount = (id: string, child = '') => searchable.filter(item => matchesRoleplayTopic(item.topicHints, id, child)).length;
@@ -185,10 +185,10 @@ export default async function RoleplayLibraryPage({
       <RoleplayTopicsReadiness />
 
       <form action="/admin/roleplays/library" method="get" className="flex flex-wrap gap-3">
-        <label className="sr-only" htmlFor="library-query">Buscar ejercicios por título o huella</label>
+        <label className="sr-only" htmlFor="library-query">Buscar ejercicios por título, tema o huella</label>
         <input id="library-query" name="q" type="search" maxLength={100}
-          defaultValue={params.q?.slice(0, 100) ?? ''}
-          placeholder="Buscar por escenario o identificador SHA-256"
+          defaultValue={q}
+          placeholder="Buscar por escenario, tema o identificador"
           className="min-w-0 w-full sm:w-auto sm:min-w-0 flex-1 rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-4 py-3 text-[var(--theme-control-text)] placeholder:text-[var(--text-tertiary)]" />
         {showArchived && <input type="hidden" name="archived" value="1" />}
         {topic && <input type="hidden" name="topic" value={topic} />}
