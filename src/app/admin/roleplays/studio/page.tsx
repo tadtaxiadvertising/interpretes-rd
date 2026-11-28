@@ -232,6 +232,7 @@ export default function RoleplayStudioPage() {
   const [showPendingReview, setShowPendingReview] = useState(false);
   const [compactPreference, setCompactPreference] = useState<boolean | null>(null);
   const [focusMode, setFocusMode] = useState(false);
+  const [listenAfterConfirm, setListenAfterConfirm] = useState(false);
   const [advancedTurnId, setAdvancedTurnId] = useState<string | null>(null);
   const [immersiveMode, setImmersiveMode] = useState(false);
   const [workspaceTab, setWorkspaceTab] = useState<'edit' | 'finish'>('edit');
@@ -293,14 +294,14 @@ export default function RoleplayStudioPage() {
     update(id, { [boundary]: timestamp });
   };
 
-  const previewSegment = (segment: Segment) => {
-    if (segment.ranges) { previewPairWithoutGap(segment.id); return; }
-    previewSimpleSegment(segment);
+  const previewSegment = (segment: Segment, restart = false) => {
+    if (segment.ranges) { previewPairWithoutGap(segment.id, restart); return; }
+    previewSimpleSegment(segment, restart);
   };
 
   /** Only previews the seam: no export, no transcode and no server request. */
-  const previewPairWithoutGap = (id: string) => {
-    if (pairPreviewId === id) { stopPairPreview(); return; }
+  const previewPairWithoutGap = (id: string, restart = false) => {
+    if (!restart && pairPreviewId === id) { stopPairPreview(); return; }
     const sorted = [...segments].sort((a, b) => a.start - b.start);
     const at = sorted.findIndex(item => item.id === id);
     const first = sorted[at];
@@ -502,6 +503,7 @@ export default function RoleplayStudioPage() {
     setPlayhead(0);
     setDraftBusy(false);
     activeAudioFile.current = file;
+    setListenAfterConfirm(false);
     setAudio(file);
     setUrl(URL.createObjectURL(file));
   };
@@ -2119,7 +2121,12 @@ export default function RoleplayStudioPage() {
     setNotice(next
       ? 'Intervención confirmada. Continúa con el siguiente turno sin confirmar.'
       : 'Intervención confirmada. No quedan turnos sin confirmar en esta selección.');
-    if (next) selectFocusedTurn(next.id);
+    if (next) {
+      selectFocusedTurn(next.id);
+      // Only the explicit confirmation gesture may start one next preview.
+      // No timers, effects, hidden turns or playback-driven confirmations.
+      if (listenAfterConfirm && validStudioRanges(next, duration)) previewSegment(next, true);
+    }
   };
 
   const archiveTurns = (turns: Segment[]) => {
@@ -3023,6 +3030,7 @@ export default function RoleplayStudioPage() {
               sourceProfileCount={sourceProfileCount}
               previewActive={previewingId === focusedTurn.segment.id || pairPreviewId === focusedTurn.segment.id}
               playhead={playhead} duration={duration}
+              listenAfterConfirm={listenAfterConfirm} onListenAfterConfirmChange={setListenAfterConfirm}
               onSelect={selectFocusedTurn} onConfirm={confirmAndAdvance}
               onExclude={() => removeIntervention(focusedTurn.segment.id, true)}
               onApplyProfile={() => applySourceSpeakerProfile(focusedTurn.segment.id)}
