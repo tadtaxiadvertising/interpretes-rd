@@ -3272,7 +3272,7 @@ export default function RoleplayStudioPage() {
             />;
           })}
           </div>
-          <div hidden={workspaceActive && workspaceTab !== 'finish'} className="space-y-3">
+          <div id="studio-export" tabIndex={-1} hidden={workspaceActive && workspaceTab !== 'finish'} className="scroll-mt-6 space-y-3">
           {!workspaceActive && segments.length > 0 && <nav aria-label="Volver a edición" className="flex flex-wrap gap-2">
             <a href="#studio-turns" className="theme-action-secondary inline-flex min-h-11 items-center rounded-lg px-3 py-2 text-xs font-semibold">Volver a intervenciones</a>
           </nav>}
