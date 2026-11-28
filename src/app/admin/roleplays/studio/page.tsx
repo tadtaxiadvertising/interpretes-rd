@@ -86,6 +86,16 @@ export default function RoleplayStudioPage() {
   const [trashOpen, setTrashOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [reviewCenterOpen, setReviewCenterOpen] = useState(false);
+  const [reviewCenterRequested, setReviewCenterRequested] = useState(false);
+  useEffect(() => {
+    if (!reviewCenterRequested) return;
+    const section = document.getElementById('studio-review-center');
+    if (section && !section.closest('[hidden], [inert]')) {
+      section.focus({ preventScroll: true });
+      section.scrollIntoView?.({ block: 'nearest' });
+    }
+    setReviewCenterRequested(false);
+  }, [reviewCenterRequested]);
   const [reviewCategory, setReviewCategory] = useState<'all' | 'unconfirmed' | StudioReviewCode>('all');
   // Confirmation belongs to this editing session, not to the published payload.
   const [confirmedTurns, setConfirmedTurns] = useState<ReadonlyMap<string, Segment>>(() => new Map());
@@ -3131,7 +3141,7 @@ export default function RoleplayStudioPage() {
             </div>
           )}
           {reviewCenterOpen && segments.length > 0 && (
-            <section id="studio-review-center" aria-label="Centro de revisión editorial" className="space-y-2 rounded-lg border border-[var(--border)] p-3">
+            <section id="studio-review-center" tabIndex={-1} aria-label="Centro de revisión editorial" className="space-y-2 rounded-lg border border-[var(--border)] p-3">
               <h3 className="text-sm font-semibold text-[var(--foreground)]">Incidencias de todo el proyecto</h3>
               <p className="text-xs text-[var(--text-secondary)]">Incluye intervenciones ocultas por búsqueda o filtros. No modifica los cortes ni confirma automáticamente las voces.</p>
               <label className="block text-xs text-[var(--text-secondary)]">Tipo de incidencia
@@ -3372,6 +3382,51 @@ export default function RoleplayStudioPage() {
           )}
           {!workspaceActive && error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-[var(--theme-danger)]">{error}</p>}
           {!workspaceActive && notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-[var(--theme-success)]">{notice}</p>}
+          {segments.length > 0 && (
+            <section aria-label="Calidad antes de publicar" className="space-y-3 rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-panel)] p-3">
+              <h3 className="text-base font-semibold text-[var(--foreground)]">Calidad antes de publicar</h3>
+              <p className="text-xs text-[var(--text-secondary)]">Resumen de todas las intervenciones del proyecto, independientemente de los filtros y de la parte elegida.</p>
+              <div className="grid grid-cols-3 gap-2" role="status" aria-label="Estado de calidad del proyecto">
+                <div className="min-w-0 rounded-lg bg-[var(--theme-surface-muted)] p-2">
+                  <p className="text-xl font-bold tabular-nums text-[var(--theme-warning)]">{issueTurns.length}</p>
+                  <p className="break-words text-xs text-[var(--foreground)]">Con incidencias</p>
+                </div>
+                <div className="min-w-0 rounded-lg bg-[var(--theme-surface-muted)] p-2">
+                  <p className="text-xl font-bold tabular-nums text-[var(--theme-info)]">{readyUnconfirmedCount}</p>
+                  <p className="break-words text-xs text-[var(--foreground)]">Por confirmar</p>
+                </div>
+                <div className="min-w-0 rounded-lg bg-[var(--theme-surface-muted)] p-2">
+                  <p className="text-xl font-bold tabular-nums text-[var(--theme-success)]">{confirmedIds.size}</p>
+                  <p className="break-words text-xs text-[var(--foreground)]">Confirmadas</p>
+                </div>
+              </div>
+              {issueTurns.length > 0 ? (
+                <p className="text-xs text-[var(--theme-warning)]">Corrige las incidencias antes de preparar los cortes afectados.</p>
+              ) : readyUnconfirmedCount > 0 ? (
+                <p className="text-xs text-[var(--text-secondary)]">Sin incidencias detectadas. Escucha las intervenciones pendientes antes de confirmar.</p>
+              ) : (
+                <p className="text-xs font-semibold text-[var(--theme-success)]">Todas las intervenciones están confirmadas y sin incidencias detectadas.</p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {issueTurns.length > 0 && <button type="button" disabled={busy || draftBusy || analyzingSilences}
+                  onClick={() => openReviewEntry(issueTurns[0].turn.id)}
+                  className="theme-action-primary min-h-11 rounded-lg px-3 py-2 text-sm font-semibold">Corregir primera incidencia</button>}
+                {readyUnconfirmedCount > 0 && <button type="button" disabled={busy || draftBusy || analyzingSilences}
+                  onClick={() => openReviewEntry(readyUnconfirmed[0].turn.id)}
+                  className="theme-action-secondary min-h-11 rounded-lg px-3 py-2 text-sm font-semibold">Revisar primera sin confirmar</button>}
+                {(issueTurns.length > 0 || readyUnconfirmedCount > 0) && <button type="button" disabled={busy || draftBusy || analyzingSilences}
+                  onClick={() => {
+                    setWorkspaceTab('edit');
+                    setReviewCategory(issueTurns.length > 0 ? 'all' : 'unconfirmed');
+                    setTrashOpen(false);
+                    setReviewCenterOpen(true);
+                    setReviewCenterRequested(true);
+                  }}
+                  className="theme-action-secondary min-h-11 rounded-lg px-3 py-2 text-sm font-semibold">Ver todas las pendientes</button>}
+              </div>
+              <p className="text-xs text-[var(--text-secondary)]">Esta revisión es editorial; la preparación del paquete mantiene sus validaciones independientes.</p>
+            </section>
+          )}
           {segments.length > 0 && <StudioTopicPicker value={editorialTopic} onChange={setEditorialTopic} disabled={busy || draftBusy || analyzingSilences}/>}
           <StudioFinalizationPanel
             segmentCount={segments.length} expandedEditor={expandedEditor}
