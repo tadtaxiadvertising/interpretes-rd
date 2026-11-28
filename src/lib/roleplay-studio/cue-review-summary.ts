@@ -69,6 +69,30 @@ export function conflictingSelectedTimedCueIndices(
     .sort((a, b) => a - b);
 }
 
+/**
+ * Conservative timing-only suggestion: trim a single edge against one
+ * selected neighbor. Never infer a word boundary or resolve containment.
+ * The caller must let the editor listen and explicitly accept the change.
+ */
+export function proposeSelectedCueEdgeTrim(
+  cues: readonly TimedTranscriptCue[], indices: readonly number[], index: number,
+  duration: number,
+): { start: number; end: number } | null {
+  if (!indices.includes(index) || !Number.isFinite(duration) || duration <= 0) return null;
+  const conflicts = conflictingSelectedTimedCueIndices(cues, indices, index);
+  if (conflicts.length !== 1) return null;
+  const cue = cues[index];
+  const other = cues[conflicts[0]];
+  if (cue.end > duration || other.end > duration) return null;
+  let { start, end } = cue;
+  if (other.start < start && other.end < end) start = other.end;
+  else if (other.start > start && other.end > end) end = other.start;
+  else return null;
+  const trimmed = (start - cue.start) + (cue.end - end);
+  if (trimmed <= 0 || trimmed > 0.5 + 1e-9 || end - start < 0.5 - 1e-9) return null;
+  return { start, end };
+}
+
 /** Identify candidate turns requiring an operator's attention, without inferring voices. */
 export function cueRequiresEditorialReview(cue: TimedTranscriptCue): boolean {
   const role = classifySpeakerRole(cue.speaker);
