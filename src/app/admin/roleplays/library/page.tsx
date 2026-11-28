@@ -3,6 +3,7 @@ import { AlertTriangle, AudioLines, Copy, Layers3, Library, Plus } from 'lucide-
 import prisma from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
+import { openingAssignmentConfigured } from '@/lib/roleplay/direct-upload-pilot-config';
 import { getReusableRoleplayAudio, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 import { ROLEPLAY_TOPICS, resolveRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic, parseRoleplayLibrarySearch, matchesRoleplayLibrarySearch } from '@/lib/roleplay-library-topics';
 import RoleplayTopicsReadiness from './RoleplayTopicsReadiness';
@@ -99,6 +100,7 @@ export default async function RoleplayLibraryPage({
   const params = await searchParams;
   const q = parseRoleplayLibrarySearch(params.q);
   const showArchived = params.archived === '1';
+  const privateAssignmentConfigured = openingAssignmentConfigured(process.env);
   const result = await getLibrary();
   let editorialEnabled = process.env.ROLEPLAY_LIBRARY_EDITORIAL_TOPICS_ENABLED === 'true';
   let editorialUnavailable = false;
@@ -282,16 +284,22 @@ export default async function RoleplayLibraryPage({
                   <>
                     <Link
                       href={`/admin/roleplays/library/${encodeURIComponent(item.sourceSessionId)}`}
+                      prefetch={false}
                       className="rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] px-4 py-3 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--theme-hover)]"
                     >
                       Escuchar y revisar
                     </Link>
-                    <Link
-                      href={`/admin/roleplays/new?sourceSessionId=${encodeURIComponent(item.sourceSessionId)}`}
-                      className="rounded-xl theme-action-primary px-4 py-3 text-sm font-semibold"
-                    >
-                      Reutilizar y asignar
-                    </Link>
+                    {item.audioKind === 'private' && !privateAssignmentConfigured ? (
+                      <p className="max-w-xs rounded-xl border border-[var(--theme-control-border)] p-3 text-xs text-[var(--theme-warning)]">Asignación privada no habilitada. Puedes revisar la plantilla sin volver a subir audio.</p>
+                    ) : (
+                      <Link
+                        href={`/admin/roleplays/new?sourceSessionId=${encodeURIComponent(item.sourceSessionId)}`}
+                        prefetch={false}
+                        className="rounded-xl theme-action-primary px-4 py-3 text-sm font-semibold"
+                      >
+                        Reutilizar y asignar
+                      </Link>
+                    )}
                   </>
                 )}
                 {editorialEnabled && <RoleplayLibraryTopicEditor key={item.fingerprint + ':' + (item.editorialTopic?.topic ?? '') + ':' + (item.editorialTopic?.subtopic ?? '')}
