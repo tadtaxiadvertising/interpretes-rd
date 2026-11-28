@@ -619,6 +619,27 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(player.currentTime).toBe(30);
   });
 
+  it('offers nearby section links and focuses the card explicitly for keyboard review', () => {
+    const player = selectAudio();
+    const nav = screen.getByRole('navigation', { name: 'Accesos rápidos del editor' });
+    expect(within(nav).getByRole('link', { name: 'Grabación' }).getAttribute('href')).toBe('#studio-source');
+    expect(within(nav).getByRole('link', { name: 'Transcripción' }).getAttribute('href')).toBe('#studio-subtitles');
+    expect(within(nav).queryByRole('link', { name: 'Ir a finalizar' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    expect(within(nav).getByRole('link', { name: 'Ir a finalizar' }).getAttribute('href')).toBe('#studio-export');
+    expect(within(screen.getByRole('navigation', { name: 'Volver a edición' })).getByRole('link', { name: 'Volver a intervenciones' }).getAttribute('href')).toBe('#studio-turns');
+    expect(document.getElementById('studio-export')?.tabIndex).toBe(-1);
+    fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Usar atajos de teclado' }));
+    const article = profileGroup().closest('article')!;
+    expect(document.activeElement).toBe(article);
+    fireEvent.keyDown(article, { key: '1' });
+    expect(metadata(profileGroup())).toEqual({ role: 'doctor', language: 'en' });
+    expect(player.play).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir escritorio de edición' }));
+    expect(screen.queryByRole('navigation', { name: 'Accesos rápidos del editor' })).toBeNull();
+  });
+
   it('reviews with scoped keyboard shortcuts without typing, confirming or excluding accidentally', () => {
     const player = selectAudio();
     for (let i = 0; i < 2; i++) fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));

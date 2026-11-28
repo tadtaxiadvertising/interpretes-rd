@@ -2391,7 +2391,7 @@ export default function RoleplayStudioPage() {
         </ol>
         <p className="mt-3 text-xs text-[var(--text-secondary)]">Puedes volver a cualquier paso disponible sin perder los cambios. La transcripción es opcional.</p>
       </nav>
-      <section id="studio-source" className="scroll-mt-6 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-4">
+      <section id="studio-source" tabIndex={-1} className="scroll-mt-6 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-4">
         <label htmlFor="studio-audio" className="block text-sm font-semibold text-[var(--foreground)]">
           Grabación original MP3 o video/audio largo (local, hasta 8 GiB)
         </label>
@@ -2467,7 +2467,7 @@ export default function RoleplayStudioPage() {
           aria-label="Reproductor de preescucha sin pausa"
           {...pairMediaHandlers}
            className="hidden" />}
-            <div id="studio-subtitles" className="scroll-mt-6 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+            <div id="studio-subtitles" tabIndex={-1} className="scroll-mt-6 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
               <label htmlFor="studio-transcript" className="block text-sm font-semibold text-[var(--theme-link)]">
                 Opcional: importar tiempos de transcripción SRT / WebVTT
               </label>
@@ -2668,7 +2668,7 @@ export default function RoleplayStudioPage() {
         )}
       </section>
       {audio && duration > 0 && reviewCues.length > 0 && (
-        <section id="studio-transcript-review" className="scroll-mt-6 space-y-4 rounded-2xl border border-amber-400/25 bg-amber-400/5 p-5">
+        <section id="studio-transcript-review" tabIndex={-1} className="scroll-mt-6 space-y-4 rounded-2xl border border-amber-400/25 bg-amber-400/5 p-5">
           <h2 className="text-lg font-bold text-[var(--foreground)]">Seleccionar turnos de la transcripción</h2>
           <p className="text-sm text-[var(--text-secondary)]">
             Hay {reviewCues.length} turnos disponibles y {chosenCueIndices.length} seleccionados
@@ -2886,10 +2886,17 @@ export default function RoleplayStudioPage() {
       )}
       </div>
       {audio && duration > 0 && (
-        <section id="studio-turns" className={`min-w-0 scroll-mt-6 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-3 sm:p-4 ${workspaceActive ? 'space-y-2 lg:flex lg:h-[calc(100dvh-9rem)] lg:min-h-0 lg:flex-col lg:overflow-hidden' : 'space-y-3'}`}>
+        <section id="studio-turns" tabIndex={-1} className={`min-w-0 scroll-mt-6 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-3 sm:p-4 ${workspaceActive ? 'space-y-2 lg:flex lg:h-[calc(100dvh-9rem)] lg:min-h-0 lg:flex-col lg:overflow-hidden' : 'space-y-3'}`}>
           {workspaceActive && (
             <StudioWorkspaceHeader stage={workspaceTab} onStageChange={setWorkspaceTab}
               onExit={() => setImmersiveMode(false)} exitRef={workspaceExit}/>
+          )}
+          {!workspaceActive && (
+            <nav aria-label="Accesos rápidos del editor" className="flex flex-wrap gap-2">
+              <a href="#studio-source" className="theme-action-secondary inline-flex min-h-11 items-center rounded-lg px-3 py-2 text-xs font-semibold">Grabación</a>
+              <a href={reviewCues.length ? '#studio-transcript-review' : '#studio-subtitles'} className="theme-action-secondary inline-flex min-h-11 items-center rounded-lg px-3 py-2 text-xs font-semibold">Transcripción</a>
+              {segments.length > 0 && <a href="#studio-export" className="theme-action-secondary inline-flex min-h-11 items-center rounded-lg px-3 py-2 text-xs font-semibold">Ir a finalizar</a>}
+            </nav>
           )}
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
             <h2 className="flex items-center gap-2 text-lg font-bold text-[var(--foreground)]"><AudioLines size={20} /> Intervenciones ({segments.length}/{editorLimit})</h2>
@@ -3030,6 +3037,7 @@ export default function RoleplayStudioPage() {
               sourceProfileCount={sourceProfileCount}
               previewActive={previewingId === focusedTurn.segment.id || pairPreviewId === focusedTurn.segment.id}
               playhead={playhead} duration={duration}
+              onFocusCard={() => focusStudioIntervention(focusedTurn.segment.id, !workspaceActive)}
               listenAfterConfirm={listenAfterConfirm} onListenAfterConfirmChange={setListenAfterConfirm}
               onSelect={selectFocusedTurn} onConfirm={confirmAndAdvance}
               onExclude={() => removeIntervention(focusedTurn.segment.id, true)}
@@ -3272,7 +3280,10 @@ export default function RoleplayStudioPage() {
             />;
           })}
           </div>
-          <div hidden={workspaceActive && workspaceTab !== 'finish'} className="space-y-3">
+          <div id="studio-export" tabIndex={-1} hidden={workspaceActive && workspaceTab !== 'finish'} className="scroll-mt-6 space-y-3">
+          {!workspaceActive && segments.length > 0 && <nav aria-label="Volver a edición" className="flex flex-wrap gap-2">
+            <a href="#studio-turns" className="theme-action-secondary inline-flex min-h-11 items-center rounded-lg px-3 py-2 text-xs font-semibold">Volver a intervenciones</a>
+          </nav>}
           {segments.length > 0 && !sourceRequiresLocal && !hasCompound && (
             <StudioConsecutivePreview
               sourceUrl={url}

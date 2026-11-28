@@ -17,6 +17,7 @@ type Props = {
   previewActive: boolean;
   playhead: number;
   duration: number;
+  onFocusCard: () => void;
   listenAfterConfirm: boolean;
   onListenAfterConfirmChange: (enabled: boolean) => void;
   onSelect: (id: string) => void;
@@ -33,6 +34,8 @@ type Props = {
 export default function StudioFocusNavigation({
   visibleSegments, focusedTurn, focusIndex, totalTurns, workspaceActive,
   canConfirmFocused, editingDisabled, confirmed, focusedReviewIssue, sourceProfileCount,
+  previewActive, playhead, duration, onFocusCard, onSelect, onConfirm, onExclude, onApplyProfile,
+  onPreview, onPause, onSkip, onSeek,
   previewActive, playhead, duration, onSelect, onConfirm, onExclude, onApplyProfile,
   onPreview, onPause, onSkip, onSeek, listenAfterConfirm, onListenAfterConfirmChange,
 }: Props) {
@@ -60,9 +63,13 @@ export default function StudioFocusNavigation({
       <p role="status" className="basis-full text-xs text-[var(--text-secondary)]">
         Intervención {focusedTurn.index + 1} de {totalTurns} · {focusIndex + 1} de {visibleSegments.length} visibles
       </p>
-      <p id="studio-focused-shortcuts" className="basis-full text-xs text-[var(--text-secondary)]">
-        Con la tarjeta de intervención enfocada: Espacio para escuchar o detener; 1 cliente, 2 hispanohablante, 3 intérprete original; ← / → para cambiar de turno. Clasificar no confirma ni excluye.
-      </p>
+      <div className="flex basis-full flex-wrap items-center gap-2">
+        <button type="button" onClick={onFocusCard} disabled={editingDisabled}
+          className="theme-action-secondary min-h-11 rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-50">Usar atajos de teclado</button>
+        <p id="studio-focused-shortcuts" className="min-w-0 flex-1 text-xs text-[var(--text-secondary)]">
+          Con la tarjeta enfocada: Espacio para escuchar o detener; 1 cliente, 2 hispanohablante, 3 intérprete original; ← / → para cambiar de turno. Clasificar no confirma ni excluye.
+        </p>
+      </div>
       <div className="flex basis-full flex-wrap items-center gap-2">
         <button type="button" disabled={!canConfirmFocused} onClick={onConfirm}
           aria-keyshortcuts="Control+Enter Meta+Enter"
