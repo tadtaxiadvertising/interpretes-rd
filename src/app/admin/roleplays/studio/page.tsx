@@ -2768,9 +2768,10 @@ export default function RoleplayStudioPage() {
                   {trim && (
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
                       <span>Ajuste propuesto: {trim.start.toFixed(3)}–{trim.end.toFixed(3)} s. No identifica palabras.</span>
-                      <button type="button" onClick={() => previewSubtitleCue({ ...cue, ...trim }, index)}
+                      <button type="button" onClick={() => previewSubtitleCue({ ...cue, ...trim }, index, true)}
+                        aria-pressed={previewingId === `subtitle-trim-${index}`}
                         className="rounded border border-[var(--border)] px-2 py-1 text-[var(--theme-link)]">
-                        Escuchar ajuste
+                        {previewingId === `subtitle-trim-${index}` ? 'Detener ajuste' : 'Escuchar ajuste'}
                       </button>
                       <button type="button" onClick={() => applyCueEdgeTrim(index)}
                         className="rounded border border-[var(--border)] px-2 py-1 font-semibold text-[var(--theme-link)]">
