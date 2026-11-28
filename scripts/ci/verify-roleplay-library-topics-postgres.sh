@@ -39,27 +39,32 @@ PY
   printf '\nRESET ROLE;\n'
 } | psql_ci
 psql_ci <<'SQL'
-DO $ BEGIN
+DO $topic_check$ BEGIN
   IF to_regclass('public.roleplay_library_topics') IS NOT NULL THEN
     RAISE EXCEPTION 'Schema survived explicit rollback';
   END IF;
-END $;
+END $topic_check$;
 SQL
 # Force a failure after CREATE/ALTER/REVOKE but before commit; ON_ERROR_STOP
 # must terminate the session with an open transaction, which rolls back.
-if {
+if failure_output=$({
   printf 'SET ROLE fixture_owner;\n'
   sed '/^COMMIT;$/i SELECT 1 / 0;' "$staged"
-} | psql_ci > /dev/null 2>&1; then
+} | psql_ci -v VERBOSITY=verbose 2>&1); then
   echo 'Expected late installation failure was not observed' >&2
   exit 1
 fi
+if ! grep -q 'ERROR:  22012:' <<< "$failure_output"; then
+  printf '%s\n' "$failure_output" >&2
+  echo 'Expected division-by-zero SQLSTATE 22012' >&2
+  exit 1
+fi
 psql_ci <<'SQL'
-DO $ BEGIN
+DO $topic_check$ BEGIN
   IF to_regclass('public.roleplay_library_topics') IS NOT NULL THEN
     RAISE EXCEPTION 'Partial schema survived failed installation';
   END IF;
-END $;
+END $topic_check$;
 SQL
 # Install unchanged reviewed SQL only inside the disposable CI database.
 {
@@ -177,22 +182,27 @@ check_readiness fixture_owner owner
 check_readiness fixture_app policy
 check_readiness service_role denied
 # An accidental duplicate installation must fail closed, not reset saved rows.
-if {
+if failure_output=$({
   printf 'SET ROLE fixture_owner;\n'
   cat "$staged"
-} | psql_ci > /dev/null 2>&1; then
+} | psql_ci -v VERBOSITY=verbose 2>&1); then
   echo 'Unexpected success on duplicate schema installation' >&2
   exit 1
 fi
+if ! grep -q 'ERROR:  42P07:' <<< "$failure_output"; then
+  printf '%s\n' "$failure_output" >&2
+  echo 'Expected duplicate-table SQLSTATE 42P07' >&2
+  exit 1
+fi
 psql_ci <<'SQL'
-DO $ BEGIN
+DO $topic_check$ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM public.roleplay_library_topics
     WHERE fingerprint=repeat('a',64) AND topic='medical' AND subtopic='pharmacy'
   ) THEN
     RAISE EXCEPTION 'Duplicate installation changed saved category';
   END IF;
-END $;
+END $topic_check$;
 SQL
 check_readiness fixture_owner owner
 echo 'Isolated editorial topics SQL checks passed'
