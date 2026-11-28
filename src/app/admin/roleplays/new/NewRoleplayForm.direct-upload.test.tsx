@@ -92,7 +92,7 @@ describe('gated creation receipt recovery form', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Recuperar intento anterior' }));
     await screen.findByText(/Creación confirmada mediante el recibo/);
     expect(fetcher).toHaveBeenCalledExactlyOnceWith('/api/admin/roleplays/creation-receipt', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestKey: key }), cache: 'no-store',
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestKey: key }), cache: 'no-store', signal: expect.any(AbortSignal),
     });
     expect(screen.getByRole('button', { name: 'Crear roleplay' })).toHaveProperty('disabled', true);
     expect(screen.queryByText('¡Roleplay creado correctamente!')).toBeNull();
@@ -119,7 +119,7 @@ describe('gated creation receipt recovery form', () => {
     await user.keyboard('{Enter}');
     await screen.findByText(/Creación confirmada mediante el recibo/);
     expect(fetcher).toHaveBeenCalledExactlyOnceWith('/api/admin/roleplays/creation-receipt', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestKey: key }), cache: 'no-store',
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestKey: key }), cache: 'no-store', signal: expect.any(AbortSignal),
     });
     expect(screen.getByRole('button', { name: 'Crear roleplay' })).toHaveProperty('disabled', true);
   });
