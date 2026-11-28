@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps, ReactNode } from 'react';
 import StudioFinalizationPanel from './StudioFinalizationPanel';
@@ -57,6 +57,38 @@ describe('Studio finalization presentation',()=>{
     expect(handoff.getAttribute('href')).toBe('/admin/roleplays/new?studioTransfer=opaque-token');
     expect(fireEvent.click(handoff)).toBe(false);
     expect(props.onContinue).toHaveBeenCalledOnce();
+  });
+  it('puts direct preparation before optional download and desktop instructions',()=>{
+    const {props}=setup({segmentCount:1, expandedEditor:false, publicationPlan:{parts:[parts[0]],issue:null},
+      currentWavPlan:{parts:[{key:'a',bytes:1024}],issue:null}});
+    const direct=screen.getByRole('button',{name:'Preparar WAV local para asignación'});
+    const alternative=screen.getByRole('region',{name:'Descarga del plan o paquete'});
+    const download=within(alternative).getByRole('button',{name:'Descargar plan local de cortes (JSON)'});
+    expect(direct.compareDocumentPosition(alternative) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(direct.className).toContain('theme-action-primary');
+    expect(download.className).toContain('theme-action-secondary');
+    expect(props.onPrepareLocal).not.toHaveBeenCalled();
+    expect(props.onDownload).not.toHaveBeenCalled();
+    fireEvent.click(download);
+    expect(props.onDownload).toHaveBeenCalledOnce();
+    expect(props.onPrepareLocal).not.toHaveBeenCalled();
+  });
+  it('promotes the local plan when browser preparation is unavailable',()=>{
+    const {props}=setup({segmentCount:1,expandedEditor:false,localMp3Eligible:false,wavSource:false,currentWavPlan:null,
+      publicationPlan:{parts:[parts[0]],issue:null}});
+    const alternative=screen.getByRole('region',{name:'Descarga del plan o paquete'});
+    expect(within(alternative).getByRole('heading',{name:'Preparar con el exportador de escritorio'})).toBeTruthy();
+    expect(within(alternative).getByRole('button',{name:'Descargar plan local de cortes (JSON)'}).className).toContain('theme-action-primary');
+    expect(props.onDownload).not.toHaveBeenCalled();
+    expect(props.onPrepareServer).not.toHaveBeenCalled();
+  });
+  it('promotes the selected part download when full local browser preparation is unavailable',()=>{
+    const {props}=setup({wavSource:false,localMp3Eligible:false,currentWavPlan:null,selectedPublicationPart:parts[1]});
+    const part=screen.getByRole('button',{name:'Descargar parte seleccionada (JSON local)'});
+    expect(part.className).toContain('theme-action-primary');
+    fireEvent.click(part);
+    expect(props.onDownloadPart).toHaveBeenCalledOnce();
+    expect(props.onPrepareLocal).not.toHaveBeenCalled();
   });
   it('requests a mode change without starting a server export',()=>{
     const {props}=setup({segmentCount:1,expandedEditor:false,sourceRequiresLocal:false,localMp3Eligible:true,wavSource:false,currentWavPlan:null});
