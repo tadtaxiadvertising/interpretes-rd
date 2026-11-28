@@ -162,3 +162,17 @@ export function selectRoleplayLibraryPreview(titles: readonly string[], query: s
     title, index, matches: directMatch || matchingTerms > 0,
   }));
 }
+
+export const ROLEPLAY_LIBRARY_PAGE_SIZE = 12;
+
+/** Paginate the already filtered and ranked catalog. Clamp stale page links
+ * after archive/restore changes, and reject ambiguous query parameters. */
+export function paginateRoleplayLibrary<T>(items: readonly T[], requestedPage: unknown) {
+  const totalPages = Math.max(1, Math.ceil(items.length / ROLEPLAY_LIBRARY_PAGE_SIZE));
+  const parsed = typeof requestedPage === 'string' && /^[1-9][0-9]{0,8}$/.test(requestedPage)
+    ? Number(requestedPage) : 1;
+  const page = Math.min(parsed, totalPages);
+  const offset = (page - 1) * ROLEPLAY_LIBRARY_PAGE_SIZE;
+  const visible = items.slice(offset, offset + ROLEPLAY_LIBRARY_PAGE_SIZE);
+  return { page, totalPages, visible, first: visible.length ? offset + 1 : 0, last: offset + visible.length };
+}

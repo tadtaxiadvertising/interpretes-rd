@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { openingAssignmentConfigured } from '@/lib/roleplay/direct-upload-pilot-config';
 import { getReusableRoleplayAudio, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
-import { ROLEPLAY_TOPICS, resolveRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic, parseRoleplayLibrarySearch, scoreRoleplayLibrarySearch, ROLEPLAY_LIBRARY_SIZE_OPTIONS, parseRoleplayLibrarySize, matchesRoleplayLibrarySize, selectRoleplayLibraryPreview } from '@/lib/roleplay-library-topics';
+import { ROLEPLAY_TOPICS, resolveRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic, parseRoleplayLibrarySearch, scoreRoleplayLibrarySearch, ROLEPLAY_LIBRARY_SIZE_OPTIONS, parseRoleplayLibrarySize, matchesRoleplayLibrarySize, selectRoleplayLibraryPreview, paginateRoleplayLibrary } from '@/lib/roleplay-library-topics';
 import RoleplayTopicsReadiness from './RoleplayTopicsReadiness';
 import { RoleplayLibraryTopicEditor } from './RoleplayLibraryTopicEditor';
 import { RoleplayLibraryVisibilityButton } from './RoleplayLibraryVisibilityButton';
@@ -23,7 +23,7 @@ async function getLibrary() {
   try {
     const sessions = await prisma.roleplaySession.findMany({
       where: { status: { notIn: ['DRAFT', 'CANCELLED'] }, scenarios: { some: {} } },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: SCAN_LIMIT,
       select: {
         id: true,
@@ -95,7 +95,7 @@ async function getLibrary() {
 export default async function RoleplayLibraryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string | string[]; archived?: string | string[]; topic?: string | string[]; subtopic?: string | string[]; size?: string | string[] }>;
+  searchParams: Promise<{ q?: string | string[]; archived?: string | string[]; topic?: string | string[]; subtopic?: string | string[]; size?: string | string[]; page?: string | string[] }>;
 }) {
   const params = await searchParams;
   const q = parseRoleplayLibrarySearch(params.q);
@@ -129,12 +129,14 @@ export default async function RoleplayLibraryPage({
     .filter(item => item.searchScore > 0)
     .sort((a, b) => b.searchScore - a.searchScore);
   const matches = searchable.filter(item => matchesRoleplayTopic(item.topicHints, topic, subtopic));
+  const pagination = paginateRoleplayLibrary(matches, params.page);
   const selectedTopic = ROLEPLAY_TOPICS.find(item => item.id === topic);
   const topicCount = (id: string, child = '') => searchable.filter(item => matchesRoleplayTopic(item.topicHints, id, child)).length;
-  const libraryHref = (nextTopic = '', nextSubtopic = '', nextQ = q, archived = showArchived, nextSize = size) => {
+  const libraryHref = (nextTopic = '', nextSubtopic = '', nextQ = q, archived = showArchived, nextSize = size, nextPage = 1) => {
     const query = new URLSearchParams();
     if (nextQ) query.set('q', nextQ);
     if (nextSize) query.set('size', nextSize);
+    if (nextPage > 1) query.set('page', String(nextPage));
     if (archived) query.set('archived', '1');
     if (nextTopic) query.set('topic', nextTopic);
     if (nextSubtopic) query.set('subtopic', nextSubtopic);
@@ -251,7 +253,7 @@ export default async function RoleplayLibraryPage({
               <Link href={libraryHref(topic, subtopic, q, true)} className={showArchived ? 'font-bold text-[var(--theme-link)]' : 'text-[var(--text-secondary)] hover:text-[var(--foreground)]'}>Eliminados de la biblioteca ({archivedCount})</Link>
             </div>
           </div>
-          {!result.error && <p className="text-sm text-[var(--text-secondary)]">{matches.length} instantáneas · {result.scanned} sesiones examinadas</p>}
+          {!result.error && <p className="text-sm text-[var(--text-secondary)]">{matches.length ? `Mostrando ${pagination.first}–${pagination.last} de ${matches.length} plantillas` : '0 plantillas'} · {result.scanned} sesiones examinadas</p>}
         </div>
         {!result.error && matches.length === 0 && (
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-12 text-center">
@@ -260,7 +262,7 @@ export default async function RoleplayLibraryPage({
             <p className="mt-2 text-sm text-[var(--text-secondary)]">{q || topic || size ? 'Cambia de tema, subtema, cantidad de escenarios o búsqueda para ver otros ejercicios.' : showArchived ? 'Los ejercicios borrados de la biblioteca pueden restaurarse aquí.' : 'Publica un roleplay con audios válidos para incorporarlo a esta biblioteca.'}</p>
           </div>
         )}
-        {matches.map((item) => (
+        {pagination.visible.map((item) => (
           <article key={item.fingerprint} className="rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
@@ -326,6 +328,17 @@ export default async function RoleplayLibraryPage({
             </div>
           </article>
         ))}
+        {!result.error && pagination.totalPages > 1 && (
+          <nav aria-label="Páginas de plantillas" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] p-3 text-sm">
+            {pagination.page > 1 ? (
+              <Link href={libraryHref(topic, subtopic, q, showArchived, size, pagination.page - 1)} prefetch={false} className="theme-action-secondary inline-flex min-h-11 items-center rounded-lg px-4 py-2 font-semibold">Anterior</Link>
+            ) : <span className="px-4 py-2 text-[var(--text-secondary)]">Inicio</span>}
+            <p aria-current="page" className="text-[var(--foreground)]">Página {pagination.page} de {pagination.totalPages}</p>
+            {pagination.page < pagination.totalPages ? (
+              <Link href={libraryHref(topic, subtopic, q, showArchived, size, pagination.page + 1)} prefetch={false} className="theme-action-secondary inline-flex min-h-11 items-center rounded-lg px-4 py-2 font-semibold">Siguiente</Link>
+            ) : <span className="px-4 py-2 text-[var(--text-secondary)]">Fin</span>}
+          </nav>
+        )}
       </section>
     </div>
   );
