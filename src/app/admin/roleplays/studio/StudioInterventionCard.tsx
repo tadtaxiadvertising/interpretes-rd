@@ -5,7 +5,7 @@ import { Trash2 } from 'lucide-react';
 import { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import { formatStudioTime as formatTime } from '@/lib/roleplay-studio/format-time';
 import { studioSelectedSeconds, type StudioCutRange } from '@/lib/roleplay-studio/compound-cuts';
-import { makeNeutralSegmentTitle, studioEditorialProfile, type StudioLanguage, type StudioSpeakerRole } from '@/lib/roleplay-studio/speaker-profiles';
+import { makeNeutralSegmentTitle, studioEditorialProfile, studioProfileSelection, type StudioLanguage, type StudioSpeakerRole } from '@/lib/roleplay-studio/speaker-profiles';
 import type { BoundaryProposal } from '@/lib/roleplay-studio/boundary-proposals';
 
 export type StudioIntervention = {
@@ -79,7 +79,7 @@ function StudioInterventionCard({
       ] as const).map(([speakerRole, language, label]) => (
         <button key={speakerRole} type="button"
           aria-pressed={activeProfile === speakerRole && segment.language === language}
-          onClick={() => update(segment.id, { speakerRole: speakerRole === 'doctor' && activeProfile === 'doctor' ? segment.speakerRole : speakerRole, language })}
+          onClick={() => update(segment.id, studioProfileSelection(segment.speakerRole, speakerRole))}
           className={`min-h-11 rounded-lg border px-3 py-2 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)] ${activeProfile === speakerRole && segment.language === language ? 'theme-action-primary' : 'theme-action-secondary'}`}>
           {label} · {language.toUpperCase()}
         </button>
@@ -150,7 +150,9 @@ function StudioInterventionCard({
         className="rounded-lg p-2 text-[var(--theme-danger)] hover:bg-red-500/10"><Trash2 size={16}/></button>
     </div>);
   return (
-  <article key={segment.id} id={`studio-intervention-${segment.id}`} tabIndex={-1}
+  <article key={segment.id} id={`studio-intervention-${segment.id}`} tabIndex={focusMode ? 0 : -1}
+    aria-describedby={focusMode ? "studio-focused-shortcuts" : undefined}
+    aria-keyshortcuts={focusMode ? "Space 1 2 3 ArrowLeft ArrowRight" : undefined}
     className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] p-2.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--theme-focus)]">
     <div className="flex flex-wrap items-center gap-2">
       <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--foreground)]">
