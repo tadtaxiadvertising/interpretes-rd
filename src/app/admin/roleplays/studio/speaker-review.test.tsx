@@ -370,6 +370,49 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(roles()).toEqual(['unknown', 'unknown', 'unknown']);
   });
 
+  it('only plays the next visible unconfirmed turn after an opt-in and explicit confirmation', () => {
+    const player = selectAudio();
+    for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    const titles = screen.getAllByLabelText('Título');
+    fireEvent.change(titles[0], { target: { value: 'Visible A' } });
+    fireEvent.change(titles[1], { target: { value: 'Oculto' } });
+    fireEvent.change(titles[2], { target: { value: 'Visible C' } });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), { target: { value: 'Visible' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
+    const optIn = screen.getByRole('checkbox', { name: 'Escuchar siguiente al confirmar' });
+    expect(optIn).toHaveProperty('checked', false);
+    fireEvent.click(optIn);
+    expect(player.play).not.toHaveBeenCalled();
+    chooseProfile('doctor');
+    expect(player.play).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar y avanzar' }));
+    expect(player.play).toHaveBeenCalledTimes(1);
+    expect(player.currentTime).toBe(60);
+    expect(screen.getByText('Intervención 3 de 3 · 2 de 2 visibles')).toBeTruthy();
+    expect(screen.getByRole('status', { name: 'Confirmaciones editoriales' }).textContent).toContain('1/3');
+    player.currentTime = 90;
+    fireEvent.timeUpdate(player);
+    expect(player.play).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('status', { name: 'Confirmaciones editoriales' }).textContent).toContain('1/3');
+    chooseProfile('patient');
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar y avanzar' }));
+    expect(player.play).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('status', { name: 'Confirmaciones editoriales' }).textContent).toContain('2/3');
+  });
+
+  it('does not start an invalid next range even when consecutive listening is enabled', () => {
+    const player = selectAudio();
+    for (let i = 0; i < 2; i++) fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    fireEvent.change(screen.getAllByLabelText('Final (segundos)')[1], { target: { value: '121' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Escuchar siguiente al confirmar' }));
+    chooseProfile('doctor');
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar y avanzar' }));
+    expect(screen.getByText('Intervención 2 de 2 · 2 de 2 visibles')).toBeTruthy();
+    expect(player.play).not.toHaveBeenCalled();
+    expect(screen.getByRole('status', { name: 'Confirmaciones editoriales' }).textContent).toContain('1/2');
+  });
+
   it('confirms a classified turn and advances without losing it while filtering unconfirmed turns', () => {
     const player = selectAudio();
     for (let i = 0; i < 2; i++) fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
