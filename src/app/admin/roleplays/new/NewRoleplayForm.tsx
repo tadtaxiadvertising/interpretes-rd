@@ -99,6 +99,18 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   // No clinical media, request key or recipient is persisted in browser storage.
   const keyedAttempt = useRef<{ key: string; scenarioCount: number; trackedToken: string | null } | null>(null);
   const [keyedStatus, setKeyedStatus] = useState<SingleCreationRecovery['status'] | 'CHECKING' | null>(null);
+  // Keep the reference in memory; warn about a full-page exit only while
+  // the receipt is unresolved. Browsers may suppress the native prompt.
+  const hasPendingReceipt = keyedStatus !== null && keyedStatus !== 'COMPLETED';
+  useEffect(() => {
+    if (!hasPendingReceipt) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [hasPendingReceipt]);
   const [recoveryInput, setRecoveryInput] = useState('');
   const [recoveryInputError, setRecoveryInputError] = useState<string | null>(null);
   const [referenceCopyNotice, setReferenceCopyNotice] = useState<string | null>(null);
@@ -1161,7 +1173,9 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           {keyedStatus !== 'COMPLETED' && !isCreating && <button type="button" disabled={keyedStatus === 'CHECKING'}
             onClick={() => { void checkCreationReceipt(); }}
             className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50 sm:w-auto">Consultar resultado sin reenviar audios</button>}
-          <Link href="/admin/roleplays" className="block text-sm font-semibold text-[var(--theme-link)] underline">Consultar roleplays existentes</Link>
+          <Link href="/admin/roleplays" target={hasPendingReceipt ? '_blank' : undefined}
+            rel={hasPendingReceipt ? 'noopener noreferrer' : undefined}
+            className="block text-sm font-semibold text-[var(--theme-link)] underline">Consultar roleplays existentes{hasPendingReceipt ? ' (nueva pestaña)' : ''}</Link>
           {keyedStatus !== 'COMPLETED' && keyedAttempt.current && (
             <div className="space-y-2">
               <label htmlFor="active-roleplay-recovery-reference" className="block text-sm font-medium text-[var(--foreground)]">Referencia del intento</label>
@@ -1171,7 +1185,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
               <button type="button" onClick={() => { void copyRecoveryReference(); }}
                 className="min-h-11 w-full rounded-xl theme-action-secondary px-3 py-2 text-sm font-semibold sm:w-auto">Copiar referencia de recuperación</button>
               {referenceCopyNotice && <p role="status" className="text-xs text-[var(--text-secondary)]">{referenceCopyNotice}</p>}
-              <p className="text-xs text-[var(--text-secondary)]">Guarda esta referencia antes de cerrar o recargar. Solo la misma cuenta de administrador puede consultar el recibo. No inicies otra creación hasta comprobar el resultado.</p>
+              <p className="text-xs text-[var(--text-secondary)]">Guarda esta referencia antes de cerrar o recargar, incluso si el navegador no muestra un aviso. Solo la misma cuenta de administrador puede consultar el recibo. No inicies otra creación hasta comprobar el resultado.</p>
             </div>
           )}
         </section>
