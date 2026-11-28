@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inferRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic, resolveRoleplayTopics } from './roleplay-library-topics';
+import { inferRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic, resolveRoleplayTopics, parseRoleplayLibrarySearch, matchesRoleplayLibrarySearch } from './roleplay-library-topics';
 
 describe('library topic suggestions', () => {
   it('recognizes bilingual titles and ignores case and accents', () => {
@@ -48,5 +48,33 @@ describe('explicit editorial categories', () => {
     expect(titles).toEqual(['Pharmacy', 'Insurance claim']);
     expect(resolveRoleplayTopics(titles, null)).toEqual(inferRoleplayTopics(titles));
     expect(resolveRoleplayTopics(titles, {topic:'medical',subtopic:'claims'})).toEqual(inferRoleplayTopics(titles));
+  });
+});
+
+describe('catalog search', () => {
+  it('ignores repeated or malformed query parameters and bounds input', () => {
+    expect(parseRoleplayLibrarySearch(['a','b'])).toBe('');
+    expect(parseRoleplayLibrarySearch(undefined)).toBe('');
+    expect(parseRoleplayLibrarySearch('  Pediatría  ')).toBe('Pediatría');
+    expect(parseRoleplayLibrarySearch('a'.repeat(101))).toHaveLength(100);
+  });
+  it('matches case, accents, punctuation and fingerprint prefixes', () => {
+    const titles = ['Consulta MÉDICA', 'Parent-teacher meeting'];
+    const fingerprint = 'abc123' + '0'.repeat(58);
+    const topics = inferRoleplayTopics(titles);
+    expect(matchesRoleplayLibrarySearch(titles,fingerprint,topics,'consulta medica')).toBe(true);
+    expect(matchesRoleplayLibrarySearch(titles,fingerprint,topics,'PARENT TEACHER')).toBe(true);
+    expect(matchesRoleplayLibrarySearch(titles,fingerprint,topics,'ABC123')).toBe(true);
+    expect(matchesRoleplayLibrarySearch(titles,fingerprint,topics,'!!!')).toBe(false);
+    expect(matchesRoleplayLibrarySearch(titles,fingerprint,topics,'farmacia')).toBe(false);
+  });
+  it('searches resolved topic and child labels without substituting inferred classifications for saved ones', () => {
+    const titles = ['Intervención 1'];
+    const fingerprint = '0'.repeat(64);
+    const topics = resolveRoleplayTopics(titles, {topic:'medical',subtopic:'pediatrics'});
+    expect(matchesRoleplayLibrarySearch(titles,fingerprint,topics,'pediatria')).toBe(true);
+    expect(matchesRoleplayLibrarySearch(titles,fingerprint,topics,'medicina')).toBe(true);
+    expect(matchesRoleplayLibrarySearch(titles,fingerprint,topics,'seguros')).toBe(false);
+    expect(matchesRoleplayLibrarySearch(titles,fingerprint,[], 'pediatria')).toBe(false);
   });
 });
