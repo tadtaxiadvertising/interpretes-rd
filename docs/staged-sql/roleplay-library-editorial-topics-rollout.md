@@ -17,3 +17,9 @@ From the application checkout with the same DATABASE_URL and trusted CA configur
 ### Administrator interface
 
 After deployment, open Biblioteca de roleplays → Diagnóstico de categorías permanentes → Comprobar configuración. This requests the same metadata-only check as the terminal command, even while the feature flag is off. It does not perform schema changes, writes, or authorize activation. The standalone build must include the traced SQL file. A positive report still requires staging CRUD validation.
+
+## Atomic installation rehearsal
+
+The disposable PostgreSQL job now rehearses the exact proposed SQL with its outer COMMIT replaced by ROLLBACK, injects a deliberate late failure before COMMIT, and verifies that neither attempt leaves the table behind. It then installs the unchanged proposal in the disposable database and checks that a second installation fails without modifying a saved category or its access configuration. This intentionally preserves the proposal's fail-closed behavior; do not add DROP TABLE, CREATE TABLE IF NOT EXISTS or broad grants to recover from a collision.
+
+The production plan remains separate from the automatic Prisma migrations. Before a reviewed installation, identify the migration owner and actual application role in staging. Confirm the expected schema is absent (if present, diagnose drift instead of reinstalling), use the reviewed transaction, and verify access using the application connection. Keep the feature flag disabled until the end-to-end staging and rollout gates above are satisfied. Rollback of activation is flag-off, not deletion of saved metadata.

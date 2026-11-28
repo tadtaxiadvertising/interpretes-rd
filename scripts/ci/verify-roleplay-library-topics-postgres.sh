@@ -23,6 +23,45 @@ GRANT USAGE, CREATE ON SCHEMA public TO fixture_owner;
 ALTER DEFAULT PRIVILEGES FOR ROLE fixture_owner IN SCHEMA public
   GRANT ALL ON TABLES TO anon, authenticated, service_role;
 SQL
+# Rehearse the exact staged SQL in a transaction, replacing only its final
+# COMMIT with ROLLBACK. Reject wrapper drift before sending anything to psql.
+staged=docs/staged-sql/roleplay-library-editorial-topics.sql
+python3 - "$staged" <<'PY'
+import pathlib, sys
+lines = pathlib.Path(sys.argv[1]).read_text().splitlines()
+statements = [line.strip() for line in lines if line.strip() and not line.lstrip().startswith('--')]
+assert statements[0] == 'BEGIN;' and statements[-1] == 'COMMIT;'
+assert sum(line.upper() in ('BEGIN;', 'COMMIT;', 'ROLLBACK;') for line in statements) == 2
+PY
+{
+  printf 'SET ROLE fixture_owner;\n'
+  sed 's/^COMMIT;$/ROLLBACK;/' "$staged"
+  printf '\nRESET ROLE;\n'
+} | psql_ci
+psql_ci <<'SQL'
+DO $ BEGIN
+  IF to_regclass('public.roleplay_library_topics') IS NOT NULL THEN
+    RAISE EXCEPTION 'Schema survived explicit rollback';
+  END IF;
+END $;
+SQL
+# Force a failure after CREATE/ALTER/REVOKE but before commit; ON_ERROR_STOP
+# must terminate the session with an open transaction, which rolls back.
+if {
+  printf 'SET ROLE fixture_owner;\n'
+  sed '/^COMMIT;$/i SELECT 1 / 0;' "$staged"
+} | psql_ci > /dev/null 2>&1; then
+  echo 'Expected late installation failure was not observed' >&2
+  exit 1
+fi
+psql_ci <<'SQL'
+DO $ BEGIN
+  IF to_regclass('public.roleplay_library_topics') IS NOT NULL THEN
+    RAISE EXCEPTION 'Partial schema survived failed installation';
+  END IF;
+END $;
+SQL
+# Install unchanged reviewed SQL only inside the disposable CI database.
 {
   printf 'SET ROLE fixture_owner;\n'
   cat docs/staged-sql/roleplay-library-editorial-topics.sql
@@ -137,4 +176,23 @@ assert result["rlsActiveForServer"] == (expected == "policy")
 check_readiness fixture_owner owner
 check_readiness fixture_app policy
 check_readiness service_role denied
+# An accidental duplicate installation must fail closed, not reset saved rows.
+if {
+  printf 'SET ROLE fixture_owner;\n'
+  cat "$staged"
+} | psql_ci > /dev/null 2>&1; then
+  echo 'Unexpected success on duplicate schema installation' >&2
+  exit 1
+fi
+psql_ci <<'SQL'
+DO $ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.roleplay_library_topics
+    WHERE fingerprint=repeat('a',64) AND topic='medical' AND subtopic='pharmacy'
+  ) THEN
+    RAISE EXCEPTION 'Duplicate installation changed saved category';
+  END IF;
+END $;
+SQL
+check_readiness fixture_owner owner
 echo 'Isolated editorial topics SQL checks passed'
