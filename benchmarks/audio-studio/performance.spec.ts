@@ -199,7 +199,8 @@ test.describe('mobile focus navigation', () => {
         await expect(help).toHaveCount(1);
         const optIn = nav.getByRole('checkbox', { name: 'Escuchar siguiente al confirmar' });
         await expect(optIn).toHaveCount(1);
-        const optInLabel = nav.locator('label').filter({ has: optIn });
+        const optInLabel = nav.locator('label').filter({ has: page.getByRole('checkbox', { name: 'Escuchar siguiente al confirmar' }) });
+        await expect(optInLabel).toHaveCount(1);
         const controls = [...buttons, selector, slider, help, optInLabel];
         for (const control of controls) {
           const box = await control.boundingBox();
