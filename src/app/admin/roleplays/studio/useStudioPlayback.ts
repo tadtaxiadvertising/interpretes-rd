@@ -6,6 +6,7 @@ import type { TimedTranscriptCue } from '@/lib/roleplay-studio/transcript';
 import type { StudioSuggestedClip } from '@/lib/roleplay-studio/silence-analysis';
 import type { GaplessPairPlan } from '@/lib/roleplay-studio/gapless-pair-preview';
 import { MAX_LOCAL_MEDIA_SECONDS } from '@/lib/roleplay-studio/long-media';
+import { watchPreviewEnd } from '@/lib/roleplay-studio/preview-end-watch';
 
 /** Coordinates the existing primary and auxiliary media elements; no audio
  * allocation, decoding, network requests or editorial mutations. */
@@ -19,15 +20,28 @@ export function useStudioPlayback(duration: number, setDuration: (duration: numb
   const pairPlayback = useRef<{ plan: GaplessPairPlan; stage: 1 | 2 } | null>(null);
   const previewEnd = useRef<number | null>(null);
   const primaryPlaybackRevision = useRef(0);
+  const cancelPreviewWatch = useRef<(() => void) | null>(null);
+  const clearPreviewWatch = useCallback(() => {
+    cancelPreviewWatch.current?.();
+    cancelPreviewWatch.current = null;
+  }, []);
   const pairPlaybackRevision = useRef(0);
-  const attachPlayer = useCallback((element: HTMLMediaElement | null) => { player.current = element; }, []);
+  const attachPlayer = useCallback((element: HTMLMediaElement | null) => {
+    if (player.current !== element) {
+      primaryPlaybackRevision.current += 1;
+      previewEnd.current = null;
+      clearPreviewWatch();
+      player.current = element;
+    }
+  }, [clearPreviewWatch]);
   const pauseEditorialAudio = useCallback(() => { player.current?.pause(); pairPlayer.current?.pause(); }, []);
   useEffect(() => () => {
     primaryPlaybackRevision.current += 1;
     pairPlaybackRevision.current += 1;
     previewEnd.current = null;
     pairPlayback.current = null;
-  }, []);
+    clearPreviewWatch();
+  }, [clearPreviewWatch]);
 
   const stopPairPreview = useCallback(() => {
     pairPlaybackRevision.current += 1;
@@ -42,9 +56,21 @@ export function useStudioPlayback(duration: number, setDuration: (duration: numb
   const stopPreview = useCallback(() => {
     primaryPlaybackRevision.current += 1;
     previewEnd.current = null;
+    clearPreviewWatch();
     setPreviewingId(null);
     player.current?.pause();
-  }, []);
+  }, [clearPreviewWatch]);
+
+  const monitorPreview = (element: HTMLMediaElement, end: number, request: number) => {
+    clearPreviewWatch();
+    cancelPreviewWatch.current = watchPreviewEnd(element, end,
+      () => primaryPlaybackRevision.current === request && player.current === element &&
+        previewEnd.current === end,
+      () => {
+        setPlayhead(element.currentTime);
+        stopPreview();
+      });
+  };
 
   const seekAudio = (seconds: number) => {
     const audioPlayer = player.current;
@@ -54,6 +80,7 @@ export function useStudioPlayback(duration: number, setDuration: (duration: numb
     // the administrator when inspecting another timestamp.
     primaryPlaybackRevision.current += 1;
     previewEnd.current = null;
+    clearPreviewWatch();
     setPreviewingId(null);
     stopPairPreview();
     audioPlayer.currentTime = timestamp;
@@ -75,21 +102,23 @@ export function useStudioPlayback(duration: number, setDuration: (duration: numb
     audioPlayer.currentTime = segment.start;
     setPlayhead(segment.start);
     previewEnd.current = segment.end;
+    monitorPreview(audioPlayer, segment.end, request);
     setPreviewingId(segment.id);
     void audioPlayer.play().catch(() => {
       if (request !== primaryPlaybackRevision.current || player.current !== audioPlayer) return;
       previewEnd.current = null;
+      clearPreviewWatch();
       setPreviewingId(null);
       setError('No fue posible reproducir el fragmento.');
     });
   };
 
   /** Listen to precisely one SRT candidate without modifying its selection or cuts. */
-  const previewSubtitleCue = (cue: TimedTranscriptCue, index: number) => {
+  const previewSubtitleCue = (cue: Pick<TimedTranscriptCue, 'start' | 'end'>, index: number, adjusted: boolean | 'removed' = false) => {
     const audioPlayer = player.current;
     if (!audioPlayer || !Number.isFinite(cue.start) || !Number.isFinite(cue.end) ||
         cue.start < 0 || cue.end <= cue.start || cue.end > duration) return;
-    const previewId = `subtitle-${index}`;
+    const previewId = adjusted === 'removed' ? `subtitle-removed-${index}` : adjusted ? `subtitle-trim-${index}` : `subtitle-${index}`;
     if (previewingId === previewId) {
       stopPreview();
       return;
@@ -101,10 +130,12 @@ export function useStudioPlayback(duration: number, setDuration: (duration: numb
     audioPlayer.currentTime = cue.start;
     setPlayhead(cue.start);
     previewEnd.current = cue.end;
+    monitorPreview(audioPlayer, cue.end, request);
     setPreviewingId(previewId);
     void audioPlayer.play().catch(() => {
       if (request !== primaryPlaybackRevision.current || player.current !== audioPlayer) return;
       previewEnd.current = null;
+      clearPreviewWatch();
       setPreviewingId(null);
       setError('No fue posible escuchar este turno de la transcripción.');
     });
@@ -122,10 +153,12 @@ export function useStudioPlayback(duration: number, setDuration: (duration: numb
     audioPlayer.currentTime = start;
     setPlayhead(start);
     previewEnd.current = end;
+    monitorPreview(audioPlayer, end, request);
     setPreviewingId(null);
     void audioPlayer.play().catch(() => {
       if (request !== primaryPlaybackRevision.current || player.current !== audioPlayer) return;
       previewEnd.current = null;
+      clearPreviewWatch();
       setError('No fue posible escuchar la región sugerida.');
     });
   };
@@ -159,6 +192,7 @@ export function useStudioPlayback(duration: number, setDuration: (duration: numb
       setEditorPlaybackRevision(n => n + 1);
     },
     onLoadedMetadata: (event: SyntheticEvent<HTMLMediaElement>) => {
+      if (event.currentTarget !== player.current) return;
       const length = event.currentTarget.duration;
       if (!Number.isFinite(length) || length <= 0) {
         setDuration(0);
@@ -172,32 +206,36 @@ export function useStudioPlayback(duration: number, setDuration: (duration: numb
       }
     },
     onTimeUpdate: (event: SyntheticEvent<HTMLMediaElement>) => {
+      if (event.currentTarget !== player.current) return;
       setPlayhead(event.currentTarget.currentTime);
-      if (previewEnd.current !== null &&
+      if (!event.currentTarget.seeking && previewEnd.current !== null &&
           event.currentTarget.currentTime >= previewEnd.current) stopPreview();
     },
     // A queued pause/ended event can arrive after another cue has started.
     // Read the element's *current* state so an obsolete event cannot cancel
     // the new bounded preview (or invalidate its play() rejection guard).
     onPause: (event: SyntheticEvent<HTMLMediaElement>) => {
-      if (!event.currentTarget.paused) return;
+      if (event.currentTarget !== player.current || !event.currentTarget.paused) return;
       primaryPlaybackRevision.current += 1;
       previewEnd.current = null;
+      clearPreviewWatch();
       setPreviewingId(null);
     },
     onEnded: (event: SyntheticEvent<HTMLMediaElement>) => {
-      if (!event.currentTarget.ended) return;
+      if (event.currentTarget !== player.current || !event.currentTarget.ended) return;
       primaryPlaybackRevision.current += 1;
       previewEnd.current = null;
+      clearPreviewWatch();
       setPreviewingId(null);
     },
     onError: (event: SyntheticEvent<HTMLMediaElement>) => {
       // MediaError may have been cleared by a newer source or playback
       // request before an old queued error event reaches this handler.
       // Never invalidate a healthy recording or its SRT review in that case.
-      if (!event.currentTarget.error) return;
+      if (event.currentTarget !== player.current || !event.currentTarget.error) return;
       primaryPlaybackRevision.current += 1;
       previewEnd.current = null;
+      clearPreviewWatch();
       setPreviewingId(null);
       setDuration(0);
       setError('El navegador no puede decodificar esta grabación. Prueba MP4/H.264 con AAC o MP3.');

@@ -11,6 +11,8 @@ export type LocalVadOptions = {
   postRollSec?: number;
 };
 const clamp = (n:number,lo:number,hi:number) => Math.min(hi,Math.max(lo,n));
+const finiteOption = (value:number|undefined,fallback:number) =>
+  typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 
 /** Pure mono/stereo VAD. It detects speech-like energy only; it does not identify speakers or language. */
 export function detectLocalSpeech(
@@ -39,10 +41,13 @@ export function detectLocalSpeech(
   const adaptive=clamp(mean*0.75+max*0.10,0.006,0.035);
   const threshold=Number.isFinite(options.thresholdRms) && (options.thresholdRms??0)>0
     ? clamp(options.thresholdRms!,0.001,0.2) : (max<=0.005?0.005:adaptive);
-  const minSilence=Math.max(1,Math.ceil(clamp(options.minSilenceDurationSec??0.4,0.1,3)*sampleRate/frame));
-  const minSpeech=Math.max(1,Math.ceil(clamp(options.minSpeechDurationSec??0.5,0.1,10)*sampleRate/frame));
-  const pre=Math.round(clamp(options.preRollSec??0.15,0,1)*sampleRate);
-  const post=Math.round(clamp(options.postRollSec??0.2,0,1)*sampleRate);
+  const minSilence=Math.max(1,Math.ceil(clamp(finiteOption(options.minSilenceDurationSec,0.4),0.1,3)*sampleRate/frame));
+  const minSpeechSamples=Math.max(1,Math.ceil(clamp(finiteOption(options.minSpeechDurationSec,0.5),0.1,10)*sampleRate));
+  // The last frame can be partial; count real samples before padding.
+  const meetsMinSpeech=(startFrame:number,endFrame:number) =>
+    Math.min(length,endFrame*frame)-startFrame*frame>=minSpeechSamples;
+  const pre=Math.round(clamp(finiteOption(options.preRollSec,0.15),0,1)*sampleRate);
+  const post=Math.round(clamp(finiteOption(options.postRollSec,0.2),0,1)*sampleRate);
   const ranges:Array<{start:number;end:number}>=[];
   let start=-1, silence=0;
   for(let f=0;f<frameCount;f++) {
@@ -53,22 +58,33 @@ export function detectLocalSpeech(
       silence++;
       if(silence>=minSilence) {
         const end=f-silence+1;
-        if(end-start>=minSpeech) ranges.push({start,end});
+        if(meetsMinSpeech(start,end)) ranges.push({start,end});
         start=-1; silence=0;
       }
     }
   }
   if(start>=0) {
     const end=frameCount-silence;
-    if(end-start>=minSpeech) ranges.push({start,end});
+    if(meetsMinSpeech(start,end)) ranges.push({start,end});
   }
   const totalSeconds=length/sampleRate;
-  return ranges.slice(0,100).map(range=>{
-    const startSample=Math.max(0,range.start*frame-pre);
-    const endSample=Math.min(length,range.end*frame+post);
+  return ranges.slice(0,100).map((range,index)=>{
+    let startSample=Math.max(0,range.start*frame-pre);
+    let endSample=Math.min(length,range.end*frame+post);
+    // If padding would overlap, split the silent gap at one shared sample.
+    // The detected acoustic intervals themselves are never trimmed.
+    const previous=ranges[index-1];
+    if(previous && (range.start-previous.end)*frame<pre+post) {
+      startSample=Math.max(startSample,Math.floor((previous.end+range.start)*frame/2));
+    }
+    const next=ranges[index+1];
+    if(next && (next.start-range.end)*frame<pre+post) {
+      endSample=Math.min(endSample,Math.floor((range.end+next.start)*frame/2));
+    }
     return {
       start:Number((startSample/sampleRate).toFixed(3)),
-      end:Number((endSample/sampleRate).toFixed(3)),
+      // Millisecond rounding must not push a valid final segment past EOF.
+      end:Math.min(totalSeconds,Number((endSample/sampleRate).toFixed(3))),
       signalLevel:Number(clamp(rms.slice(range.start,range.end).reduce((a,b)=>a+b,0)/
         Math.max(1,range.end-range.start)/(threshold*2),0,1).toFixed(3)),
     };

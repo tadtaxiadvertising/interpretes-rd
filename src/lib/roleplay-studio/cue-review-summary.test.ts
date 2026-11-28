@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, summarizeTimedCueReview } from './cue-review-summary';
+import { removedCueEdge, cueTrimActivityHint, conflictingSelectedTimedCueIndices, cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, proposeSelectedCueEdgeTrim, summarizeTimedCueReview } from './cue-review-summary';
 
 describe('pre-apply SRT quality summary', () => {
   it('counts unknown speakers, original interpreters and lengthy cues without revealing dialogue', () => {
@@ -83,6 +83,96 @@ describe('pre-apply SRT quality summary', () => {
     ];
     expect(overlappingSelectedTimedCueIndices(cues, [0, 2, 3])).toEqual([]);
     expect(overlappingSelectedTimedCueIndices(cues, [0, 1])).toEqual([0, 1]);
+  });
+
+  it('lists only selected conflicts for the chosen turn, including nested intervals', () => {
+    const cue = (start: number, end: number) => ({ start, end, speaker: null, text: 'Reference' });
+    const cues = [cue(1, 5), cue(0, 2), cue(2, 3), cue(5, 7), cue(4, 6), cue(8, 9)];
+    const selected = [0, 1, 2, 3, 5, 2, -1, 99];
+    const conflicts = conflictingSelectedTimedCueIndices(cues, selected, 0);
+    expect(conflicts).toEqual([1, 2]);
+    expect(selected.filter(index => !new Set(conflicts).has(index))).toEqual([0, 3, 5, -1, 99]);
+    expect(selected).toEqual([0, 1, 2, 3, 5, 2, -1, 99]);
+    expect(cues[0]).toEqual(cue(1, 5));
+    expect(conflictingSelectedTimedCueIndices(cues, [0, 1, 2, 3, 4, 5], 3)).toEqual([4]);
+  });
+
+  it('rejects invalid candidate times and ignores invalid selected intervals', () => {
+    const cue = (start: number, end: number) => ({ start, end, speaker: null, text: 'Reference' });
+    const cues = [cue(0, 4), cue(1, 2), cue(-1, 3), cue(NaN, 3), cue(2, 2), cue(4, 5)];
+    expect(conflictingSelectedTimedCueIndices(cues, [0, 1, 2, 3, 4, 5, 0.5], 0)).toEqual([1]);
+    for (const index of [-1, 2, 3, 4, 6, 0.5]) {
+      expect(conflictingSelectedTimedCueIndices(cues, [0, 1], index)).toEqual([]);
+    }
+  });
+
+  it('proposes trimming either side of a small overlap without changing source cues', () => {
+    const cue = (start: number, end: number) => ({ start, end, speaker: null, text: 'Reference' });
+    const cues = [cue(0, 2.25), cue(2, 4), cue(4, 6)];
+    expect(proposeSelectedCueEdgeTrim(cues, [0, 1, 2], 0, 6)).toEqual({ start: 0, end: 2 });
+    expect(proposeSelectedCueEdgeTrim(cues, [0, 1, 2], 1, 6)).toEqual({ start: 2.25, end: 4 });
+    expect(proposeSelectedCueEdgeTrim(cues, [0, 1, 2], 2, 6)).toBeNull();
+    expect(cues).toEqual([cue(0, 2.25), cue(2, 4), cue(4, 6)]);
+    const adjusted = [{ ...cues[0], end: 2 }, ...cues.slice(1)];
+    expect(overlappingSelectedTimedCueIndices(adjusted, [0, 1, 2])).toEqual([]);
+  });
+
+  it('rejects containment, multiple conflicts, large trims and insufficient remaining duration', () => {
+    const cue = (start: number, end: number) => ({ start, end, speaker: null, text: 'Reference' });
+    for (const [cues, indices, index, duration] of [
+      [[cue(0, 4), cue(1, 2)], [0, 1], 0, 4],
+      [[cue(0, 3), cue(2.8, 4), cue(2.9, 5)], [0, 1, 2], 0, 5],
+      [[cue(0, 2.501), cue(2, 4)], [0, 1], 0, 4],
+      [[cue(1.6, 2.2), cue(2, 4)], [0, 1], 0, 4],
+      [[cue(0, 2.25), cue(2, 4)], [0, 1], 0, 3.9],
+      [[cue(0, 2.25), cue(2, 4)], [1], 0, 4],
+    ] as const) {
+      expect(proposeSelectedCueEdgeTrim(cues, indices, index, duration)).toBeNull();
+    }
+    expect(proposeSelectedCueEdgeTrim([cue(0, 1), cue(0.5, 2)], [0, 1], 0, 2))
+      .toEqual({ start: 0, end: 0.5 });
+  });
+
+  it('returns the exact removed leading or trailing edge without modifying the cue', () => {
+    const cue = { start: 1, end: 4 };
+    expect(removedCueEdge(cue, { start: 1.25, end: 4 })).toEqual({ start: 1, end: 1.25 });
+    expect(removedCueEdge(cue, { start: 1, end: 3.75 })).toEqual({ start: 3.75, end: 4 });
+    expect(cue).toEqual({ start: 1, end: 4 });
+  });
+
+  it('rejects ambiguous, expanded, unchanged and invalid preview intervals', () => {
+    const cue = { start: 1, end: 4 };
+    for (const proposal of [
+      { start: 1, end: 4 }, { start: 1.25, end: 3.75 },
+      { start: 0.9, end: 4 }, { start: 1, end: 4.1 },
+      { start: 4, end: 4 }, { start: NaN, end: 4 }, { start: 1, end: Infinity },
+    ]) expect(removedCueEdge(cue, proposal)).toBeNull();
+    expect(removedCueEdge({ start: -1, end: 4 }, { start: 0, end: 4 })).toBeNull();
+  });
+
+  it('warns only when the removed edge intersects detected acoustic activity', () => {
+    const cue = { start: 1, end: 4 };
+    const snapshot = { status: 'ready' as const, segments: [{ start: 1.1, end: 2, signalLevel: 0.5 }] };
+    expect(cueTrimActivityHint(cue, { start: 1.25, end: 4 }, snapshot)).toBe('detected');
+    expect(cueTrimActivityHint(cue, { start: 1, end: 3.75 }, snapshot)).toBe('not-detected');
+    expect(cueTrimActivityHint(cue, { start: 1.1, end: 4 }, snapshot)).toBe('not-detected');
+  });
+
+  it('does not claim acoustic clearance from empty, capped, unavailable or invalid results', () => {
+    const cue = { start: 1, end: 4 };
+    const trim = { start: 1, end: 3.75 };
+    expect(cueTrimActivityHint(cue, trim, null)).toBe('unavailable');
+    for (const status of ['loading', 'limited', 'unavailable'] as const) {
+      expect(cueTrimActivityHint(cue, trim, { status, segments: [] })).toBe('unavailable');
+    }
+    expect(cueTrimActivityHint(cue, trim, { status: 'ready', segments: [] })).toBe('unavailable');
+    const segments = Array.from({ length: 100 }, (_, i) => ({ start: 5 + i, end: 5.5 + i, signalLevel: 0.5 }));
+    expect(cueTrimActivityHint(cue, trim, { status: 'ready', segments })).toBe('unavailable');
+    segments[0] = { start: 3.8, end: 4.2, signalLevel: 0.5 };
+    expect(cueTrimActivityHint(cue, trim, { status: 'ready', segments })).toBe('detected');
+    expect(cueTrimActivityHint(cue, trim, { status: 'ready', segments: [{ start: NaN, end: 2, signalLevel: 0.5 }] })).toBe('unavailable');
+    expect(cueTrimActivityHint(cue, { start: 0, end: 4 }, { status: 'ready', segments })).toBe('unavailable');
+    expect(cueTrimActivityHint(cue, cue, { status: 'ready', segments })).toBe('unavailable');
   });
 
   it('ignores invalid source times and indexes while providing review hints', () => {

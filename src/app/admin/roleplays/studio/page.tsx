@@ -8,11 +8,11 @@ import { readAudioStudioEditorPreferences } from '@/app/actions/audio-studio-set
 import { ArrowLeft, AudioLines, Plus } from 'lucide-react';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import {
-  parseTimedTranscriptForReviewWithDiagnostics, toPublishableStudioSegments,
+  parseTimedTranscriptForReviewWithDiagnostics, toPublishableStudioSegments, boundTimedCuesToMedia,
   type TimedTranscriptCue,
 } from '@/lib/roleplay-studio/transcript';
 import { fillCompatibleTimedCueSelection, selectTimedCues, suggestRepresentativeTimedCueSelection } from '@/lib/roleplay-studio/cue-selection';
-import { cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, summarizeTimedCueReview } from '@/lib/roleplay-studio/cue-review-summary';
+import { conflictingSelectedTimedCueIndices, cueTrimActivityHint, cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, proposeSelectedCueEdgeTrim, removedCueEdge, summarizeTimedCueReview } from '@/lib/roleplay-studio/cue-review-summary';
 import { availableStudioInterval } from '@/lib/roleplay-studio/available-interval';
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
 import { proposeStudioBoundaries } from '@/lib/roleplay-studio/boundary-proposals';
@@ -157,6 +157,9 @@ export default function RoleplayStudioPage() {
   const [captionTexts, setCaptionTexts] = useState<Record<string, string>>({});
   const [excludeInterpreter, setExcludeInterpreter] = useState(true);
   const [reviewCues, setReviewCues] = useState<TimedTranscriptCue[]>([]);
+  const [lastCueTrim, setLastCueTrim] = useState<{
+    index: number; before: TimedTranscriptCue; after: TimedTranscriptCue;
+  } | null>(null);
   const [chosenCueIndices, setChosenCueIndices] = useState<number[]>([]);
   const [cuePage, setCuePage] = useState(0);
   const [cueSearch, setCueSearch] = useState('');
@@ -681,6 +684,52 @@ export default function RoleplayStudioPage() {
     setNotice('Selección SRT vaciada. Las intervenciones existentes no se han modificado.');
   };
 
+  const applyCueEdgeTrim = (index: number) => {
+    const proposal = proposeSelectedCueEdgeTrim(reviewCues, chosenCueIndices, index, duration);
+    if (!proposal) return;
+    const activity = cueTrimActivityHint(reviewCues[index], proposal, localVadSnapshot);
+    if (!window.confirm(
+      (activity === 'detected' ? 'Atención: la parte retirada coincide con una región de actividad acústica local. ' : '') +
+      'Este ajuste de tiempos no conoce los límites de las palabras. ' +
+      'Escucha el fragmento propuesto antes de confirmar. Se conservarán ambos turnos y el archivo original. ¿Aplicar ajuste?',
+    )) return;
+    const before = reviewCues[index];
+    const after = { ...before, ...proposal };
+    subtitleImportRevision.current += 1;
+    stopPreview();
+    stopPairPreview();
+    setReviewCues(previous => previous.map((cue, i) => i === index ? after : cue));
+    setLastCueTrim({ index, before, after });
+    setError('');
+    setNotice(`Turno ${index + 1} ajustado para revisión. Escucha ambos turnos antes de aplicar la selección.`);
+  };
+
+  const undoCueEdgeTrim = () => {
+    if (!lastCueTrim || reviewCues[lastCueTrim.index] !== lastCueTrim.after) return;
+    const { index, before } = lastCueTrim;
+    subtitleImportRevision.current += 1;
+    stopPreview();
+    stopPairPreview();
+    setReviewCues(previous => previous.map((cue, i) => i === index ? before : cue));
+    setLastCueTrim(null);
+    setError('');
+    setNotice('Último ajuste de subtítulos deshecho; se restauraron sus tiempos anteriores.');
+  };
+
+  const keepCueAndRemoveConflicts = (index: number) => {
+    if (!chosenCueIndices.includes(index)) return;
+    const conflicts = conflictingSelectedTimedCueIndices(reviewCues, chosenCueIndices, index);
+    if (!conflicts.length) return;
+    if (!window.confirm(
+      `Conservar el turno ${index + 1} y retirar ${conflicts.length} turnos solapados de la selección pendiente. Los subtítulos originales y las intervenciones del editor se conservarán. ¿Continuar?`,
+    )) return;
+    const removed = new Set(conflicts);
+    subtitleImportRevision.current += 1;
+    setChosenCueIndices(previous => previous.filter(value => !removed.has(value)));
+    setError('');
+    setNotice(`Turno ${index + 1} conservado. ${conflicts.length} turnos incompatibles retirados solo de la selección; revisa los conflictos restantes antes de aplicar.`);
+  };
+
   const toggleCueSelection = (index: number) => {
     subtitleImportRevision.current += 1;
     if (chosenCueIndices.includes(index)) {
@@ -881,20 +930,18 @@ export default function RoleplayStudioPage() {
       if (revision !== subtitleImportRevision.current ||
           (approval && !sameEditorEdits(approval.edits))) return;
       const { cues, diagnostics } = parseTimedTranscriptForReviewWithDiagnostics(transcript, usesLocalLongMode(audio, duration));
-      const { selected, excludedCount } = filterInterpreterCues(cues, excludeInterpreter);
-      if (!selected.length) {
+      const { selected: filtered, excludedCount } = filterInterpreterCues(cues, excludeInterpreter);
+      if (!filtered.length) {
         throw new Error('No quedan intervenciones del médico o paciente después de excluir las del intérprete.');
       }
-      if (selected.some(cue => cue.end > duration + 0.1)) {
-        throw new Error('Los subtítulos contienen intervalos posteriores al final de la grabación.');
-      }
+      const { cues: selected, adjustedCount } = boundTimedCuesToMedia(filtered, duration);
       // The long source transcript is only browser-side reference material.
       // A 500-cue recording cannot be published as an unreviewed 500-scene task.
       const allIndices = selected.map((_, index) => index);
       // Never silently convert repaired provider timings into a published
       // roleplay. Show them as candidate turns for explicit approval instead.
       const timingWasRepaired = diagnostics.reordered > 0 ||
-        diagnostics.overlapping > 0 || diagnostics.divided > 0 || diagnostics.skipped > 0;
+        diagnostics.overlapping > 0 || diagnostics.divided > 0 || diagnostics.skipped > 0 || adjustedCount > 0;
       let canApplyAll = !timingWasRepaired && selected.length <= ROLEPLAY_MAX_SCENARIOS;
       if (canApplyAll) {
         try { selectTimedCues(selected, allIndices); }
@@ -918,7 +965,7 @@ export default function RoleplayStudioPage() {
         const compatible = suggestRepresentativeTimedCueSelection(selected, allIndices);
         setChosenCueIndices(compatible);
         const repairedNotice = timingWasRepaired
-          ? `Correcciones de tiempos para revisión: ${diagnostics.reordered} fuera de orden, ${diagnostics.overlapping} solapamientos y ${diagnostics.divided} intervenciones largas divididas en ventanas aproximadas (sin alineación de palabras), y ${diagnostics.skipped} intervalos invertidos o inferiores a 0,1 s omitidos. `
+          ? `Correcciones de tiempos para revisión: ${diagnostics.reordered} fuera de orden, ${diagnostics.overlapping} solapamientos y ${diagnostics.divided} intervenciones largas divididas en ventanas aproximadas (sin alineación de palabras), y ${diagnostics.skipped} intervalos invertidos o inferiores a 0,1 s omitidos; ${adjustedCount} finales ajustados a la duración real del audio. `
           : '';
         setNotice(`${repairedNotice}${selected.length} intervenciones disponibles; ${excludedCount} del intérprete original omitidas. Se sugirieron ${compatible.length} turnos compatibles de distintos momentos de la grabación, sin voz etiquetada del intérprete. Escucha los cortes y confirma hablantes antes de aplicar; el borrador no se reemplazó.`);
       }
@@ -2818,6 +2865,12 @@ export default function RoleplayStudioPage() {
           </div>
           <div className="max-h-80 space-y-2 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
             {visibleCues.map(({ cue, index }) => {
+              const conflicts = overlappingSelectedCues.includes(index)
+                ? conflictingSelectedTimedCueIndices(reviewCues, chosenCueIndices, index) : [];
+              const trim = conflicts.length === 1
+                ? proposeSelectedCueEdgeTrim(reviewCues, chosenCueIndices, index, duration) : null;
+              const trimActivity = trim ? cueTrimActivityHint(cue, trim, localVadSnapshot) : 'unavailable';
+              const removedEdge = trim ? removedCueEdge(cue, trim) : null;
               const imported = classifyImportedSpeaker(cue.speaker);
               const profile = studioEditorialProfile(imported.speakerRole);
               return (
@@ -2831,13 +2884,51 @@ export default function RoleplayStudioPage() {
                     {index + 1} · {formatTime(cue.start)}–{formatTime(cue.end)} ·
                     {profile ? ` ${profile.label} · ${imported.language === 'unknown' ? 'Idioma por revisar' : imported.language.toUpperCase()}` : ' Hablante por revisar'}
                     {hasStudioProfileLanguageMismatch(imported.speakerRole, imported.language) && ' · Revisar idioma del perfil'}
-                    {overlappingSelectedCues.includes(index) && (
-                      <span className="font-semibold text-[var(--theme-danger)]"> · Solapa otro turno seleccionado</span>
+                    {conflicts.length > 0 && (
+                      <span className="font-semibold text-[var(--theme-danger)]">
+                        {' · Solapa otro turno seleccionado: '}{conflicts.slice(0, 3).map(other => other + 1).join(', ')}
+                        {conflicts.length > 3 ? ` y ${conflicts.length - 3} más` : ''}
+                      </span>
                     )}
                   </p>
                   <p className="mt-1 break-words text-xs text-[var(--text-secondary)]">
                     {cue.text.slice(0, 200)}{cue.text.length > 200 ? '…' : ''}
                   </p>
+                  {trim && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
+                      <span>Ajuste propuesto: {trim.start.toFixed(3)}–{trim.end.toFixed(3)} s. No identifica palabras.</span>
+                      <span className={trimActivity === 'detected' ? 'basis-full font-semibold text-[var(--theme-warning)]' : 'basis-full'}>
+                        {trimActivity === 'detected'
+                          ? 'La parte retirada coincide con actividad acústica detectada. Escucha con especial atención.'
+                          : trimActivity === 'not-detected'
+                            ? 'Sin coincidencia con las regiones detectadas; esto no garantiza silencio.'
+                            : 'Sin información acústica suficiente para valorar este ajuste.'}
+                      </span>
+                      <button type="button" onClick={() => previewSubtitleCue({ ...cue, ...trim }, index, true)}
+                        aria-pressed={previewingId === `subtitle-trim-${index}`}
+                        className="rounded border border-[var(--border)] px-2 py-1 text-[var(--theme-link)]">
+                        {previewingId === `subtitle-trim-${index}` ? 'Detener ajuste' : 'Escuchar ajuste'}
+                      </button>
+                      {removedEdge && (
+                        <button type="button" onClick={() => previewSubtitleCue(removedEdge, index, 'removed')}
+                          aria-pressed={previewingId === `subtitle-removed-${index}`}
+                          aria-label={previewingId === `subtitle-removed-${index}` ? `Detener parte retirada del turno ${index + 1}` : `Escuchar parte que se retiraría del turno ${index + 1}`}
+                          className="rounded border border-[var(--border)] px-2 py-1 text-[var(--theme-link)]">
+                          {previewingId === `subtitle-removed-${index}` ? 'Detener parte retirada' : `Escuchar parte retirada (${Math.round((removedEdge.end - removedEdge.start) * 1000)} ms)`}
+                        </button>
+                      )}
+                      <button type="button" onClick={() => applyCueEdgeTrim(index)}
+                        className="rounded border border-[var(--border)] px-2 py-1 font-semibold text-[var(--theme-link)]">
+                        Ajustar y conservar ambos turnos
+                      </button>
+                    </div>
+                  )}
+                  {conflicts.length > 0 && (
+                    <button type="button" onClick={() => keepCueAndRemoveConflicts(index)}
+                      className="mt-2 rounded border border-[var(--border)] px-2 py-1 text-xs font-semibold text-[var(--theme-link)]">
+                      Conservar turno {index + 1} y retirar {conflicts.length} {conflicts.length === 1 ? 'conflicto' : 'conflictos'} de la selección
+                    </button>
+                  )}
                 </div>
                 <button type="button" onClick={() => previewSubtitleCue(cue, index)}
                   aria-label={previewingId === `subtitle-${index}`
@@ -2850,6 +2941,12 @@ export default function RoleplayStudioPage() {
               </div>
             ); })}
           </div>
+          {lastCueTrim && reviewCues[lastCueTrim.index] === lastCueTrim.after && (
+            <button type="button" onClick={undoCueEdgeTrim}
+              className="rounded border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--theme-link)]">
+              Deshacer último ajuste de subtítulos
+            </button>
+          )}
           <p role="status" aria-label="Estado de selección SRT"
             className="text-xs leading-5 text-[var(--foreground)]">
             {cueSelectionStatus.issue

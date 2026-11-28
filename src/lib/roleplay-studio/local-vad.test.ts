@@ -47,6 +47,31 @@ describe('local VAD',()=>{
     expect(result).toHaveLength(2);
   });
 
+  it.each([16000, 44100, 48000])('keeps short-pause padding disjoint without trimming acoustic intervals at %i Hz', sr=>{
+    const data=signal(sr,4,[[0.5,1.2],[1.4,2.3]]);
+    const raw=detectLocalSpeech([data],sr,{ minSilenceDurationSec: 0.1, preRollSec: 0, postRollSec: 0 });
+    expect(raw).toHaveLength(2);
+    for (const padding of [{}, { preRollSec: 1, postRollSec: 0 }, { preRollSec: 0, postRollSec: 1 }, { preRollSec: 1, postRollSec: 1 }]) {
+      const result=detectLocalSpeech([data],sr,{ minSilenceDurationSec: 0.1, ...padding });
+      expect(result).toHaveLength(2);
+      expect(result[0].end).toBeLessThanOrEqual(result[1].start);
+      for (let i=0;i<2;i++) {
+        expect(result[i].start).toBeLessThanOrEqual(raw[i].start);
+        expect(result[i].end).toBeGreaterThanOrEqual(raw[i].end);
+        expect(result[i].signalLevel).toBe(raw[i].signalLevel);
+      }
+    }
+  });
+
+  it.each([16000, 44100, 48000])('keeps existing padding when the silence is long enough at %i Hz', sr=>{
+    const result=detectLocalSpeech([signal(sr,5,[[1,2],[3,4]])],sr);
+    expect(result).toHaveLength(2);
+    expect(result[0].start).toBeCloseTo(0.85,1);
+    expect(result[0].end).toBeCloseTo(2.2,1);
+    expect(result[1].start).toBeCloseTo(2.85,1);
+    expect(result[1].end).toBeCloseTo(4.2,1);
+  });
+
   it('honors an explicit RMS threshold and minimum speech duration',()=>{
     const short=signal(16000,2,[[0.5,0.8]]);
     expect(detectLocalSpeech([short],16000,{ thresholdRms: 0.05, minSpeechDurationSec: 0.5 })).toEqual([]);
@@ -64,6 +89,34 @@ describe('local VAD',()=>{
     expect(result).toHaveLength(1);
     expect(result[0].end).toBeLessThanOrEqual(1);
     expect(result[0].end).toBe(1);
+  });
+  it.each([16000, 44100, 48000])('preserves the last segment when rounding EOF up at %i Hz', sr=>{
+    // End is slightly past 1.0005s, so rounding to milliseconds would
+    // otherwise place the segment outside the source and discard it.
+    const data=new Float32Array(sr+Math.ceil(sr*0.0006));
+    for(let i=Math.floor(sr*0.2);i<data.length;i++) {
+      data[i]=0.18*Math.sin(2*Math.PI*220*i/sr);
+    }
+    const result=detectLocalSpeech([data],sr,{postRollSec:1});
+    expect(result).toHaveLength(1);
+    expect(result[0].end).toBe(data.length/sr);
+    expect(result[0].start).toBeLessThan(result[0].end);
+  });
+  it.each([16000, 44100, 48000])('counts actual samples at the minimum speech boundary at %i Hz', sr=>{
+    for(const delta of [-1, 0, 1]) {
+      const data=new Float32Array(sr/2+delta).fill(0.18);
+      const result=detectLocalSpeech([data],sr,{ preRollSec:1, postRollSec:1 });
+      expect(result).toHaveLength(delta<0?0:1);
+    }
+  });
+  it.each([16000, 44100, 48000])('uses default settings for non-finite numeric options at %i Hz', sr=>{
+    const data=signal(sr,4,[[0.5,1.5],[2,3]]);
+    const expected=detectLocalSpeech([data],sr);
+    expect(expected).toHaveLength(2);
+    const keys=['minSilenceDurationSec','minSpeechDurationSec','preRollSec','postRollSec','thresholdRms'] as const;
+    for(const key of keys) for(const value of [NaN,Infinity,-Infinity]) {
+      expect(detectLocalSpeech([data],sr,{[key]:value})).toEqual(expected);
+    }
   });
   it('does not count pre/post-roll as detected speech duration',()=>{
     const data=signal(16000,1,[[0.7,1]]);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseTimedTranscript, parseTimedTranscriptForReview, parseTimedTranscriptForReviewWithDiagnostics, toPublishableStudioSegments } from './transcript';
+import { boundTimedCuesToMedia, parseTimedTranscript, parseTimedTranscriptForReview, parseTimedTranscriptForReviewWithDiagnostics, toPublishableStudioSegments } from './transcript';
 
 describe('Audio Studio offline subtitle import', () => {
   it('imports SRT cues in order and extracts speaker labels', () => {
@@ -14,6 +14,22 @@ Paciente: Me duele el estómago.`);
       { start: 0.5, end: 2, speaker: 'Doctor', text: 'Doctor: How are you feeling?' },
       { start: 2, end: 4.1, speaker: 'Paciente', text: 'Paciente: Me duele el estómago.' },
     ]);
+  });
+
+  it.each([',', '.'])('preserves exactly 100 ms cues without admitting 99 ms intervals (%s)', separator => {
+    const cue = (end: string) => `00:00:10${separator}000 --> 00:00:10${separator}${end}\nDoctor: Short cue`;
+    const raw = cue('100');
+    expect(parseTimedTranscript(raw)).toHaveLength(1);
+    expect(parseTimedTranscriptForReviewWithDiagnostics(raw)).toEqual({
+      cues: [{ start: 10, end: 10.1, text: 'Doctor: Short cue', speaker: 'Doctor' }],
+      diagnostics: { reordered: 0, overlapping: 0, divided: 0, skipped: 0 },
+    });
+    expect(() => parseTimedTranscript(cue('099'))).toThrow();
+    const review = parseTimedTranscriptForReviewWithDiagnostics(
+      cue('099') + `\n\n00:00:11${separator}000 --> 00:00:12${separator}000\nPatient: Next cue`
+    );
+    expect(review.cues).toHaveLength(1);
+    expect(review.diagnostics.skipped).toBe(1);
   });
 
   it('imports WebVTT with voice tags and timestamp settings', () => {
@@ -212,5 +228,36 @@ describe('Provider zero-length and inverted subtitles', () => {
       '00:00:01,000 --> 00:00:01,000\nDoctor: Invalid cue',
     ).join('\n\n');
     expect(() => parseTimedTranscriptForReviewWithDiagnostics(raw)).toThrow(/10000/);
+  });
+});
+
+
+describe('Subtitle boundaries against the actual recording', () => {
+  const cue = (start: number, end: number) => ({ start, end, text: 'Reference', speaker: 'Doctor' });
+
+  it('preserves valid cues and clamps only the tolerated tail without mutating input', () => {
+    const original = [cue(0, 1), cue(1, 2.05)];
+    expect(boundTimedCuesToMedia(original, 2.0039)).toEqual({
+      cues: [cue(0, 1), cue(1, 2.003)], adjustedCount: 1,
+    });
+    expect(original[1].end).toBe(2.05);
+    expect(boundTimedCuesToMedia([cue(0, 2)], 2)).toEqual({
+      cues: [cue(0, 2)], adjustedCount: 0,
+    });
+    expect(boundTimedCuesToMedia([cue(0, 2.1)], 2).cues[0].end).toBe(2);
+  });
+
+  it('rejects larger discrepancies and a tail too short to remain valid', () => {
+    expect(() => boundTimedCuesToMedia([cue(0, 2.101)], 2)).toThrow(/posteriores/);
+    expect(() => boundTimedCuesToMedia([cue(1.901, 2.05)], 2)).toThrow(/0,1 segundos/);
+    expect(() => boundTimedCuesToMedia([cue(2.01, 2.09)], 2)).toThrow(/0,1 segundos/);
+    expect(() => boundTimedCuesToMedia([cue(0, 2)], NaN)).toThrow(/duración/);
+    expect(() => boundTimedCuesToMedia([cue(0, Infinity)], 2)).toThrow(/inválidos/);
+  });
+
+  it('preserves a tail of exactly 100 milliseconds after adjustment', () => {
+    expect(boundTimedCuesToMedia([cue(10, 10.15)], 10.1)).toEqual({
+      cues: [cue(10, 10.1)], adjustedCount: 1,
+    });
   });
 });
