@@ -1,6 +1,7 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
+import { openingAssignmentConfigured } from './direct-upload-pilot-config';
 
 type Tx = Pick<Prisma.TransactionClient, '$queryRaw'>;
 type NewSession = {
@@ -14,9 +15,7 @@ type NewSession = {
 /** Assignment is a separate rollout step. Never enable until schema, private
  * Storage policies, clinical playback and the full participant flow are verified. */
 export function openingAssignmentEnabled(): boolean {
-  return process.env.ROLEPLAY_BILINGUAL_OPENING_API_ENABLED === 'true' &&
-    process.env.ROLEPLAY_BILINGUAL_OPENING_UI_ENABLED === 'true' &&
-    process.env.ROLEPLAY_BILINGUAL_OPENING_ASSIGNMENT_ENABLED === 'true';
+  return openingAssignmentConfigured(process.env);
 }
 
 export async function readOpeningRequirement(tx: Tx, sessionId: string): Promise<boolean> {
