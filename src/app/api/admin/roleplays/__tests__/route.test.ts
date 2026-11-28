@@ -70,6 +70,12 @@ import { actorFromBearer } from '@/lib/api-auth';
 import prisma from '@/lib/prisma';
 import { getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 import { sha256RoleplayFile } from '@/lib/roleplay-streaming-checksum';
+import { readBoundedMultipartFormData } from '@/lib/roleplay-studio/bounded-multipart';
+
+vi.mock(import('@/lib/roleplay-studio/bounded-multipart'), async importOriginal => {
+  const actual = await importOriginal();
+  return { ...actual, readBoundedMultipartFormData: vi.fn(actual.readBoundedMultipartFormData) };
+});
 
 vi.mock(import('@/lib/roleplay-streaming-checksum'), async importOriginal => {
   const actual = await importOriginal();
@@ -893,6 +899,48 @@ describe('POST /api/admin/roleplays', () => {
       expect(res.status).toBe(503);
       expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
     });
+  });
+
+  describe('upload reference ownership', () => {
+    it.each(['interpreter', 'candidate', 'all-active-interpreters', 'keyed'] as const)(
+      'releases uploaded file references in order (%s)',
+      async scope => {
+        const participantType = scope === 'keyed' ? 'interpreter' : scope;
+        const request = buildRequest({
+          participantType, participantId: participantType === 'candidate' ? '9' : '7',
+          scenarios: JSON.stringify([{ title: 'Primero' }, { title: 'Segundo' }]),
+          audios: [audioFile('first.webm', 'audio/webm', 8), audioFile('second.webm', 'audio/webm', 12)],
+        });
+        if (scope === 'keyed') {
+          process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+          process.env.ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED = 'true';
+          request.headers.set('Idempotency-Key', '123e4567-e89b-42d3-a456-426614174000');
+        }
+        // Parse a real fixture, then observe the exact array owned by the route.
+        const parsed = await request.clone().formData();
+        const queue = parsed.getAll('scenarioAudios');
+        vi.spyOn(parsed, 'getAll').mockReturnValueOnce(queue);
+        vi.mocked(readBoundedMultipartFormData).mockResolvedValueOnce(parsed);
+        const observed: Array<{ name: string; bytes: number; queued: number; retained: boolean }> = [];
+        mockUpload.mockImplementation(async (_path: string, file: File) => {
+          observed.push({ name: file.name, bytes: file.size, queued: queue.length, retained: parsed.has('scenarioAudios') });
+          return { error: null };
+        });
+        const response = await POST(request as any);
+        expect(response.status).toBe(200);
+        expect(observed).toEqual([
+          { name: 'first.webm', bytes: 8, queued: 1, retained: false },
+          { name: 'second.webm', bytes: 12, queued: 0, retained: false },
+        ]);
+        expect(mockUpload).toHaveBeenCalledTimes(2);
+        expect(queue).toHaveLength(0);
+        expect(mockRemove).not.toHaveBeenCalled();
+        if (scope === 'keyed') {
+          expect(sha256RoleplayFile).toHaveBeenCalledTimes(2);
+          expect(prisma.roleplayCreationRequest.updateMany).toHaveBeenCalledOnce();
+        }
+      },
+    );
   });
 
   describe('happy path', () => {
