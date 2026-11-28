@@ -1166,7 +1166,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
               CHECKING: 'Consultando el resultado de la solicitud original…',
               NOT_FOUND: 'Aún no hay un recibo disponible. Esto no demuestra que la creación haya fallado.',
               REVIEW_REQUIRED: 'El recibo requiere revisión. Consulta las sesiones existentes.',
-              UNAVAILABLE: 'No se pudo consultar el recibo. Conserva esta pestaña y vuelve a consultar.',
+              UNAVAILABLE: 'No se pudo consultar el recibo o se agotó el tiempo de espera. Conserva la referencia y vuelve a consultar; no reenvíes los audios.',
               COMPLETED: 'Creación confirmada mediante el recibo. Consulta la sesión existente antes de realizar otra asignación.',
             }[keyedStatus]}
           </p>
