@@ -1,4 +1,5 @@
-import type { DirectReservationStatus } from './direct-reservation-status';
+import { ROLEPLAY_DIRECT_UPLOAD_MAX_SLOTS } from '@/lib/roleplay-limits';
+import type { DirectReservationStatus, DirectReservationRecordedProgress } from './direct-reservation-status';
 
 export type DirectReservationObservation = DirectReservationStatus | 'UNAVAILABLE' | 'ACCESS_REQUIRED' | 'ENDPOINT_UNAVAILABLE';
 export function parseDirectReservationReference(value: string): string | null {
@@ -20,35 +21,59 @@ export const directReservationObservationLabels: Record<DirectReservationObserva
   ENDPOINT_UNAVAILABLE: 'La consulta del registro todavía no está disponible.',
 };
 
+export type DirectReservationObservationResult = {
+  status: DirectReservationObservation;
+  progress?: DirectReservationRecordedProgress;
+};
+
+function validatedProgress(status: DirectReservationStatus, value: unknown): DirectReservationRecordedProgress | undefined {
+  if (!['RESERVED', 'VERIFIED', 'EXPIRED'].includes(status) || !value || typeof value !== 'object') return;
+  const p = value as Record<string, unknown>;
+  if (typeof p.total !== 'number' || !Number.isSafeInteger(p.total) || p.total < 1 || p.total > ROLEPLAY_DIRECT_UPLOAD_MAX_SLOTS ||
+      typeof p.recordedVerifiedCount !== 'number' || !Number.isSafeInteger(p.recordedVerifiedCount) ||
+      p.recordedVerifiedCount < 0 || p.recordedVerifiedCount > p.total ||
+      (status === 'RESERVED' && p.recordedVerifiedCount === p.total) ||
+      (status === 'VERIFIED' && p.recordedVerifiedCount !== p.total) ||
+      typeof p.expiresAt !== 'string' || typeof p.observedAt !== 'string') return;
+  const expires = Date.parse(p.expiresAt), observed = Date.parse(p.observedAt);
+  if (!Number.isFinite(expires) || !Number.isFinite(observed) ||
+      new Date(expires).toISOString() !== p.expiresAt || new Date(observed).toISOString() !== p.observedAt ||
+      (status === 'EXPIRED') !== (observed >= expires) || expires - observed > 30 * 60_000) return;
+  return { total: p.total, recordedVerifiedCount: p.recordedVerifiedCount, expiresAt: p.expiresAt, observedAt: p.observedAt };
+}
+
 const states: readonly DirectReservationStatus[] = [
   'NOT_FOUND', 'RESERVED', 'VERIFIED', 'EXPIRED', 'PUBLICATION_RECORDED', 'CANCELLED', 'REVIEW_REQUIRED',
 ];
 
 /** This observation cannot authorize any upload, signing or publication. */
-export async function observeDirectReservation(requestKey: string, fetcher: typeof fetch = fetch): Promise<DirectReservationObservation> {
-  if (!parseDirectReservationReference(requestKey) || requestKey !== requestKey.trim()) return 'UNAVAILABLE';
+export async function observeDirectReservation(requestKey: string, fetcher: typeof fetch = fetch): Promise<DirectReservationObservationResult> {
+  if (!parseDirectReservationReference(requestKey) || requestKey !== requestKey.trim()) return { status: 'UNAVAILABLE' };
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
-  async function query(): Promise<DirectReservationObservation> {
+  async function query(): Promise<DirectReservationObservationResult> {
     try {
       const res = await fetcher('/api/admin/roleplays/uploads/status', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requestKey }), cache: 'no-store', credentials: 'same-origin',
         redirect: 'error', signal: controller.signal,
       });
-      if (res.status === 401 || res.status === 403) return 'ACCESS_REQUIRED';
-      if (res.status === 404) return 'ENDPOINT_UNAVAILABLE';
-      if (!res.ok) return 'UNAVAILABLE';
+      if (res.status === 401 || res.status === 403) return { status: 'ACCESS_REQUIRED' };
+      if (res.status === 404) return { status: 'ENDPOINT_UNAVAILABLE' };
+      if (!res.ok) return { status: 'UNAVAILABLE' };
       const body = await res.json();
       const status: unknown = body?.success === true ? body.data?.status : null;
-      return states.includes(status as DirectReservationStatus) ? status as DirectReservationStatus : 'UNAVAILABLE';
-    } catch { return 'UNAVAILABLE'; }
+      if (!states.includes(status as DirectReservationStatus)) return { status: 'UNAVAILABLE' };
+      const observedStatus = status as DirectReservationStatus;
+      const progress = validatedProgress(observedStatus, body.data.progress);
+      return { status: observedStatus, ...(progress ? { progress } : {}) };
+    } catch { return { status: 'UNAVAILABLE' }; }
   }
   try {
     return await Promise.race([
       query(),
-      new Promise<DirectReservationObservation>(resolve => {
-        timer = setTimeout(() => { resolve('UNAVAILABLE'); controller.abort(); }, 15_000);
+      new Promise<DirectReservationObservationResult>(resolve => {
+        timer = setTimeout(() => { resolve({ status: 'UNAVAILABLE' }); controller.abort(); }, 15_000);
       }),
     ]);
   } finally { clearTimeout(timer); }
