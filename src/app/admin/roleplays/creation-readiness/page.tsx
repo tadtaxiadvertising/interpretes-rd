@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import CopyDiagnostic from './copy-diagnostic';
+import SavedReservationLookup from './saved-reservation-lookup';
 import { validateAction } from '@/lib/auth/actions';
 import prisma from '@/lib/prisma';
 import { readCreationPilotConfig, type CreationPilotMode } from '@/lib/roleplay/creation-pilot-config';
@@ -92,6 +93,7 @@ export default async function CreationReadinessPage({
           <CopyDiagnostic key={evidence} evidence={evidence} />
         </section>
       )}
+      {process.env.ROLEPLAY_DIRECT_UPLOAD_RESERVATION_API_ENABLED === 'true' && <SavedReservationLookup />}
       <p className="text-sm text-[var(--text-secondary)]">Un resultado favorable no autoriza activar el piloto. Aún se debe verificar el proyecto, el SHA esperado, las restricciones y el procedimiento de recuperación. Esta pantalla no aplica migraciones ni modifica banderas.</p>
     </main>
   );

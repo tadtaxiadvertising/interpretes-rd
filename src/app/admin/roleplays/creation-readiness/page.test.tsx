@@ -22,12 +22,21 @@ beforeEach(() => {
   vi.stubEnv('ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED', 'false');
   vi.stubEnv('ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED', 'true');
   vi.stubEnv('GIT_SHA', 'a'.repeat(40));
+  vi.stubEnv('ROLEPLAY_DIRECT_UPLOAD_RESERVATION_API_ENABLED', 'false');
   mocks.validate.mockResolvedValue({ user: { role: 'admin' } });
   mocks.readiness.mockResolvedValue(true);
 });
 afterEach(() => vi.unstubAllEnvs());
 
 describe('admin runtime diagnostic', () => {
+  it('only exposes saved reservation lookup to authorized admins while the reservation API is enabled', async () => {
+    expect(await view()).not.toContain('Consultar una reserva guardada');
+    vi.stubEnv('ROLEPLAY_DIRECT_UPLOAD_RESERVATION_API_ENABLED', 'true');
+    expect(await view()).toContain('Consultar una reserva guardada');
+    expect(mocks.readiness).not.toHaveBeenCalled();
+    mocks.validate.mockResolvedValue({ user: { role: 'interpreter' } });
+    expect(await view()).not.toContain('Consultar una reserva guardada');
+  });
   it.each([{ error: 'not authorized' }, { user: { role: 'interpreter' } }])('does not inspect or reveal configuration to unauthorized users', async auth => {
     mocks.validate.mockResolvedValue(auth);
     const html = await view('1');
