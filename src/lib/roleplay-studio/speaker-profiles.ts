@@ -75,6 +75,8 @@ export function titleAfterProfileChange(
     title === `Intervención sugerida ${numbered}` ||
     title === `Médico · ${numbered}` ||
     title === `Doctor · ${numbered}` ||
+    title === `Cliente · ${numbered}` ||
+    title === `Hispanohablante · ${numbered}` ||
     title === `Paciente · ${numbered}` ||
     title === `Enfermería · ${numbered}` ||
     title === `Operador · ${numbered}` ||
