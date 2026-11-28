@@ -14,7 +14,8 @@ import { confirmRoleplayCreationRetry } from '@/lib/roleplay/creation-retry-guar
 import { formatCreationRecoveryReference, isConfirmedRoleplaySessionId, parseCreationRecoveryReference, recoverSingleRoleplayCreation, type SingleCreationRecovery } from '@/lib/roleplay/creation-receipt-browser';
 import { peekStudioHandoff, peekLocalWavHandoff, clearStudioHandoff } from '@/lib/roleplay-studio/assignment-handoff';
 import { extractExternalStudioZip } from '@/lib/roleplay-studio/external-zip';
-import { directReservationObservationLabels, observeDirectReservation, type DirectReservationObservation } from '@/lib/roleplay/direct-reservation-status-browser';
+import DirectReservationObservationSummary from '@/components/admin/DirectReservationObservationSummary';
+import { observeDirectReservation, type DirectReservationObservationResult } from '@/lib/roleplay/direct-reservation-status-browser';
 import { DirectUploadReviewRequired, type DirectUploadReviewReason } from '@/lib/roleplay/direct-upload-browser-resume';
 import { createDirectRoleplayFormController, type FormProgress } from '@/lib/roleplay/direct-upload-form-controller';
 import { createConfiguredRoleplayUploadController, consolidatePreparedRoleplaySlot, publishConsolidatedRoleplay } from '@/lib/roleplay/direct-upload-browser-http';
@@ -113,7 +114,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const [directReview,setDirectReview] = useState<DirectUploadReviewReason | null>(null);
   const [directReviewReference,setDirectReviewReference] = useState<string | null>(null);
   const [directCopyNotice,setDirectCopyNotice] = useState<string | null>(null);
-  const [directObservation,setDirectObservation] = useState<DirectReservationObservation | 'CHECKING' | null>(null);
+  const [directObservation,setDirectObservation] = useState<DirectReservationObservationResult | 'CHECKING' | null>(null);
   const directObservationPending = useRef(false);
   useEffect(()=>()=>directAbort.current?.abort(),[]);
   // Transport failures do not tell us whether the server committed the roleplay.
@@ -1227,7 +1228,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
               try { setDirectObservation(await observeDirectReservation(directReviewReference)); }
               finally { directObservationPending.current = false; }
             }} className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50 sm:w-auto">Consultar estado de la reserva</button>
-            {directObservation && <p role="status" className="text-sm text-[var(--foreground)]">{directReservationObservationLabels[directObservation]}</p>}
+            {directObservation && <DirectReservationObservationSummary result={directObservation}/>}
             <Link href="/admin/roleplays/creation-readiness" target="_blank" rel="noopener noreferrer" prefetch={false} className="block text-sm font-semibold text-[var(--theme-link)] underline">Consultar reservas guardadas (nueva pestaña)</Link>
 
             <p className="text-xs text-[var(--text-secondary)]">Guarda esta referencia para que el responsable autorizado pueda identificar la solicitud original. No es un enlace de acceso ni permite recuperar automáticamente los archivos o iniciar otra reserva.</p>

@@ -2,14 +2,15 @@
 
 import { useRef, useState } from 'react';
 import {
-  directReservationObservationLabels, observeDirectReservation, parseDirectReservationReference,
-  type DirectReservationObservation,
+  observeDirectReservation, parseDirectReservationReference,
+  type DirectReservationObservationResult,
 } from '@/lib/roleplay/direct-reservation-status-browser';
+import DirectReservationObservationSummary from '@/components/admin/DirectReservationObservationSummary';
 
 export default function SavedReservationLookup() {
   const [reference, setReference] = useState('');
   const [error, setError] = useState(false);
-  const [status, setStatus] = useState<DirectReservationObservation | 'CHECKING' | null>(null);
+  const [status, setStatus] = useState<DirectReservationObservationResult | 'CHECKING' | null>(null);
   const pending = useRef(false);
 
   async function lookup() {
@@ -39,7 +40,7 @@ export default function SavedReservationLookup() {
         {error && <p id="saved-reservation-error" role="alert" className="text-sm text-[var(--theme-danger)]">Introduce una referencia UUID válida de la reserva directa.</p>}
         <button type="submit" disabled={status === 'CHECKING'} className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50 sm:w-auto">Consultar reserva guardada</button>
       </form>
-      {status && <p role="status" className="text-sm text-[var(--foreground)]">{directReservationObservationLabels[status]}</p>}
+      {status && <DirectReservationObservationSummary result={status}/>}
     </section>
   );
 }
