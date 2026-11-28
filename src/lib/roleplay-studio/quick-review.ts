@@ -1,6 +1,6 @@
 import { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import { validStudioRanges } from './compound-cuts';
-import type { StudioSpeakerRole, StudioLanguage } from './speaker-profiles';
+import { hasStudioProfileLanguageMismatch, studioEditorialProfile, type StudioSpeakerRole, type StudioLanguage } from './speaker-profiles';
 
 type ReviewTurn = { id: string; start: number; end: number; ranges?: unknown;
   title: string; scriptPrompt: string; responseLimit: number; speakerRole: StudioSpeakerRole; language: StudioLanguage };
@@ -14,6 +14,10 @@ export function studioReviewFindings(turn: ReviewTurn, all: readonly ReviewTurn[
   if (turn.speakerRole === 'interpreter') issues.push({ code: 'interpreter', message: 'Excluye la voz del intérprete original.' });
   if (turn.speakerRole === 'unknown') issues.push({ code: 'speaker', message: 'Identifica el hablante.' });
   if (turn.language === 'unknown') issues.push({ code: 'language', message: 'Selecciona el idioma.' });
+  else if (turn.speakerRole !== 'interpreter' && hasStudioProfileLanguageMismatch(turn.speakerRole, turn.language)) {
+    const profile = studioEditorialProfile(turn.speakerRole)!;
+    issues.push({ code: 'language', message: `El idioma no coincide con ${profile.label} (${profile.language.toUpperCase()}). Escucha y revisa el perfil.` });
+  }
   if (!turn.title.trim() || turn.title.length > 200) issues.push({ code: 'title', message: 'Revisa el título (1–200 caracteres).' });
   if (!validStudioRanges(turn, duration)) issues.push({ code: 'range', message: 'Corrige los límites de audio.' });
   if (all.some(other => other.id !== turn.id && turn.start < other.end && other.start < turn.end)) {
