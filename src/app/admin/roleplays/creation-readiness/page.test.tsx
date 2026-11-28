@@ -40,6 +40,34 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe('admin runtime diagnostic', () => {
+  it('places recovery and integral actions before technical details and links to existing tools', async () => {
+    vi.stubEnv('ROLEPLAY_DIRECT_UPLOAD_RESERVATION_API_ENABLED', 'true');
+    const html = await view();
+    expect(html).toContain('href="/admin/roleplays/studio"');
+    expect(html).toContain('href="/admin/roleplays/new"');
+    expect(html).toContain('href="#saved-reservation-title"');
+    const recovery = html.indexOf('id="saved-reservation-title"');
+    const integral = html.indexOf('Ejecutar diagnóstico integral');
+    const technical = html.indexOf('Detalles técnicos y comprobaciones individuales');
+    expect(recovery).toBeGreaterThan(-1);
+    expect(recovery).toBeLessThan(integral);
+    expect(integral).toBeLessThan(technical);
+    expect(html.slice(html.lastIndexOf('<details', technical), technical)).not.toContain(' open=""');
+    expect(mocks.readiness).not.toHaveBeenCalled();
+    expect(mocks.directCatalog).not.toHaveBeenCalled();
+    expect(mocks.rollout).not.toHaveBeenCalled();
+  });
+  it('keeps technical details collapsed after integral results, but expands individual results', async () => {
+    const integral = await view(undefined, undefined, undefined, '1');
+    const individual = await view(undefined, '1');
+    const openingTag = (html: string) => {
+      const marker = html.indexOf('Detalles técnicos y comprobaciones individuales');
+      return html.slice(html.lastIndexOf('<details', marker), marker);
+    };
+    expect(openingTag(integral)).not.toContain(' open=""');
+    expect(openingTag(individual)).toContain(' open=""');
+    expect(integral.indexOf('Copiar diagnóstico')).toBeLessThan(integral.indexOf('Detalles técnicos y comprobaciones individuales'));
+  });
   it.each([undefined, '0', 'true', ['1', '1']])('does not run all probes without a single explicit request (%o)', async checkAll => {
     expect(await view(undefined, undefined, undefined, checkAll)).toContain('Ejecutar diagnóstico integral');
     expect(mocks.readiness).not.toHaveBeenCalled();
