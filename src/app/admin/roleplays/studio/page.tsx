@@ -19,7 +19,7 @@ import { proposeStudioBoundaries } from '@/lib/roleplay-studio/boundary-proposal
 import { restoreExcludedIssue, STUDIO_MAX_EXCLUDED_TURNS } from '@/lib/roleplay-studio/editorial-trash';
 import { useStudioLocalRecovery, type RestoredStudioRecovery } from './useStudioLocalRecovery';
 import { studioReviewIssue, nextUnconfirmedTurn, inspectStudioReview, type StudioReviewCode } from '@/lib/roleplay-studio/quick-review';
-import { sourceSpeakerGroup, propagateSpeakerProfile } from '@/lib/roleplay-studio/speaker-groups';
+import { sourceSpeakerGroup, propagateSpeakerProfile, summarizeSourceSpeakerGroups } from '@/lib/roleplay-studio/speaker-groups';
 import { planStudioPublicationParts, STUDIO_PACKAGE_AUDIO_SECONDS, type StudioPublicationPart } from '@/lib/roleplay-studio/publication-parts';
 import { planGaplessPair, type GaplessPairPlan } from '@/lib/roleplay-studio/gapless-pair-preview';
 import { validStudioRanges, studioSelectedSeconds } from '@/lib/roleplay-studio/compound-cuts';
@@ -1209,7 +1209,8 @@ export default function RoleplayStudioPage() {
   };
 
   const applySourceSpeakerProfile = (id: string) => {
-    const result = propagateSpeakerProfile(segments, id);
+    if (busy || draftBusy || analyzingSilences) return;
+    const result = propagateSpeakerProfile(segments, id, { visibleIds: visibleSpeakerTurnIds, protectedIds: confirmedIds });
     if (!result.changed) return;
     subtitleImportRevision.current += 1;
     stopPreview();
@@ -1221,7 +1222,7 @@ export default function RoleplayStudioPage() {
     setSegments(result.turns);
     setTurnActionFeedback(null);
     setError('');
-    setNotice(`Perfil aplicado a ${result.changed} intervenciones de la misma etiqueta de origen. Se conservaron los perfiles e idiomas ya revisados. Escucha las voces; puedes deshacer la asignación.`);
+    setNotice(`Perfil aplicado a ${result.changed} intervenciones visibles de la misma etiqueta. Se conservaron las confirmadas y las incompatibles. Escucha las voces; puedes deshacer la asignación.`);
   };
 
   const addSegment = () => {
@@ -2017,6 +2018,8 @@ export default function RoleplayStudioPage() {
   // Only the selected row expands when reviewing a longer recording.
   const compactRows = !focusMode && (compactPreference ?? (sourceRequiresLocal || segments.length >= 6));
   const query = segmentSearch.trim().toLocaleLowerCase();
+  const selectedSourceGroup = query.startsWith('grupo: ') ? sourceSpeakerGroup(query.slice(7)) : undefined;
+  const sourceGroups = useMemo(() => summarizeSourceSpeakerGroups(segments), [segments]);
   // Editorial counts are independent of the playback cursor.
   const { pendingReviewCount, reviewedCount, unidentifiedSpeakerCount,
     unreviewedLanguageCount, originalInterpreterCount } = useMemo(() => {
@@ -2060,10 +2063,11 @@ export default function RoleplayStudioPage() {
   const visibleSegments = useMemo(() => orderedSegments
     .map((segment, index) => ({ segment, index }))
     .filter(({ segment }) => (!showPendingReview || (focusMode ? !confirmedIds.has(segment.id) : needsReview(segment))) &&
-      (!query || [segment.title, segment.scriptPrompt, captionTexts[segment.id] || '',
+      (selectedSourceGroup ? segment.sourceSpeakerGroup === selectedSourceGroup : (!query || [segment.title, segment.scriptPrompt, captionTexts[segment.id] || '',
         segment.speakerRole, segment.language, studioProfileSearchText(segment.speakerRole)]
-        .some(value => value.toLocaleLowerCase().includes(query)))),
-    [orderedSegments, showPendingReview, focusMode, confirmedIds, query, captionTexts]);
+        .some(value => value.toLocaleLowerCase().includes(query))))),
+    [orderedSegments, showPendingReview, focusMode, confirmedIds, query, selectedSourceGroup, captionTexts]);
+  const visibleSpeakerTurnIds = useMemo(() => new Set(visibleSegments.map(({ segment }) => segment.id)), [visibleSegments]);
   const previewablePairIds = useMemo(() => {
     const visibleIds = new Set(visibleSegments.map(({ segment }) => segment.id));
     return new Set(visibleSegments.filter(({ segment, index }) => {
@@ -2080,7 +2084,7 @@ export default function RoleplayStudioPage() {
   const renderedSegments = focusMode ? (focusedTurn ? [focusedTurn] : []) : visibleSegments;
   const focusedTurnId = focusedTurn?.segment.id;
   const sourceProfileCount = useMemo(() => focusedTurnId
-    ? propagateSpeakerProfile(segments, focusedTurnId).changed : 0, [segments, focusedTurnId]);
+    ? propagateSpeakerProfile(segments, focusedTurnId, { visibleIds: visibleSpeakerTurnIds, protectedIds: confirmedIds }).changed : 0, [segments, focusedTurnId, visibleSpeakerTurnIds, confirmedIds]);
   const selectFocusedTurn = (id: string) => {
     // Selecting another turn is not a request to keep listening to the old one.
     if (id !== focusedTurnId || previewingId?.startsWith('boundary-proposal:')) {
@@ -3174,6 +3178,19 @@ export default function RoleplayStudioPage() {
               })}
             </div>
           </section>}
+          {sourceGroups.length > 0 && (
+            <section aria-label="Grupos de voz" className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--theme-panel)] p-3">
+              <h3 className="text-sm font-semibold text-[var(--foreground)]">Grupos de voz</h3>
+              <p className="text-xs text-[var(--text-secondary)]">Filtra por etiqueta de origen. Escucha una intervención y asigna su perfil; en modo enfoque puedes aplicarlo a otras intervenciones visibles compatibles. No son identidades verificadas.</p>
+              <label className="block text-xs font-semibold text-[var(--foreground)]">Etiqueta de voz
+                <select value={selectedSourceGroup ?? ''} onChange={event => setSegmentSearch(event.currentTarget.value ? 'grupo: ' + event.currentTarget.value : '')}
+                  className="mt-1 block min-h-11 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-3 text-sm text-[var(--theme-control-text)]">
+                  <option value="">Todos los grupos</option>
+                  {sourceGroups.map(group => <option key={group.id} value={group.id}>{group.id} · {group.count} intervenciones · {group.pending} con perfil o idioma pendiente</option>)}
+                </select>
+              </label>
+            </section>
+          )}
           {pendingSpeakerIds.length > 1 && (
             <section aria-label="Clasificación rápida de perfiles" className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
               <h3 className="text-sm font-semibold text-[var(--foreground)]">Clasificación rápida</h3>
