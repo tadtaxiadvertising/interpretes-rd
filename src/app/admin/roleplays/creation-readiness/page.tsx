@@ -3,6 +3,7 @@ import CopyDiagnostic from './copy-diagnostic';
 import SavedReservationLookup from './saved-reservation-lookup';
 import { validateAction } from '@/lib/auth/actions';
 import prisma from '@/lib/prisma';
+import { readDirectUploadPilotConfig } from '@/lib/roleplay/direct-upload-pilot-config';
 import { readCreationPilotConfig, type CreationPilotMode } from '@/lib/roleplay/creation-pilot-config';
 import { isCreationLedgerReady } from '@/lib/roleplay/creation-ledger-readiness';
 
@@ -33,6 +34,7 @@ export default async function CreationReadinessPage({
   }
 
   const pilot = readCreationPilotConfig(process.env);
+  const direct = readDirectUploadPilotConfig(process.env);
   const sha = process.env.GIT_SHA?.trim() ?? '';
   const buildId = /^[a-f0-9]{40}$/i.test(sha) ? sha.toLowerCase() : null;
   // No catalog query on initial visit, link prefetch, or malformed request.
@@ -48,6 +50,10 @@ export default async function CreationReadinessPage({
     'SHA del servicio: ' + (buildId ?? 'No informado'),
     'Modo: ' + pilot.mode,
     'Registro de idempotencia: ' + (ready ? 'Disponible según comprobación' : 'No disponible según comprobación'),
+    'Subida directa: ' + (direct.formConfigured ? 'Banderas configuradas' : 'Banderas incompletas'),
+    'Variables de subida directa: ' + (direct.environmentValuesPresent ? 'Presentes en el servicio' : 'Faltan valores'),
+    'Consulta de reservas directas: ' + (direct.reservationLookupConfigured ? 'Configurada' : 'Desactivada'),
+    'Subida directa: catálogo, Storage y configuración del navegador no comprobados.',
     'Resultado puntual; no autoriza activar el piloto.',
   ].join('\n');
 
@@ -93,7 +99,25 @@ export default async function CreationReadinessPage({
           <CopyDiagnostic key={evidence} evidence={evidence} />
         </section>
       )}
-      {process.env.ROLEPLAY_DIRECT_UPLOAD_RESERVATION_API_ENABLED === 'true' && <SavedReservationLookup />}
+      <section aria-label="Configuración de subida directa" className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-5">
+        <h2 className="font-semibold text-[var(--foreground)]">Subida directa de audios</h2>
+        <p className="text-sm font-medium text-[var(--foreground)]">{direct.formConfigured ? 'Banderas de subida directa configuradas' : 'Subida directa no configurada por completo'}</p>
+        <p className="text-sm text-[var(--text-secondary)]">Esta comprobación solo describe las banderas y la presencia de variables del servicio. No verifica las credenciales, el catálogo de reservas, las políticas de Storage ni la configuración incluida en el navegador al compilar.</p>
+        <dl className="space-y-2 text-sm">
+          <div className="flex flex-wrap justify-between gap-2"><dt className="text-[var(--text-secondary)]">Banderas configuradas</dt><dd className="font-medium text-[var(--foreground)]">{direct.flags.filter(item => item.configured).length} de {direct.flags.length}</dd></div>
+          <div className="flex flex-wrap justify-between gap-2"><dt className="text-[var(--text-secondary)]">Variables presentes</dt><dd className="font-medium text-[var(--foreground)]">{direct.requirements.filter(item => item.present).length} de {direct.requirements.length}</dd></div>
+          <div className="flex flex-wrap justify-between gap-2"><dt className="text-[var(--text-secondary)]">Consulta de reservas guardadas</dt><dd className="font-medium text-[var(--foreground)]">{direct.reservationLookupConfigured ? 'Configurada' : 'Desactivada'}</dd></div>
+        </dl>
+        <details className="space-y-2">
+          <summary className="cursor-pointer text-sm font-semibold text-[var(--theme-link)]">Ver requisitos de configuración</summary>
+          <dl className="space-y-2 text-xs">
+            {direct.flags.map(item => <div key={item.name} className="flex flex-wrap justify-between gap-1"><dt className="break-all text-[var(--text-secondary)]">{item.name}</dt><dd className="text-[var(--foreground)]">{item.configured ? 'Configurada' : 'Desactivada'}</dd></div>)}
+            {direct.requirements.map(item => <div key={item.label} className="flex flex-wrap justify-between gap-1"><dt className="break-all text-[var(--text-secondary)]">{item.label}</dt><dd className="text-[var(--foreground)]">{item.present ? 'Presente' : 'Falta valor'}</dd></div>)}
+          </dl>
+        </details>
+        <p className="text-sm text-[var(--text-secondary)]">Antes de activar: comprueba el catálogo y las restricciones de reservas, el presupuesto de objetos, los permisos privados, el flujo de recuperación y las pruebas aisladas de Storage. No actives banderas desde esta pantalla.</p>
+      </section>
+      {direct.reservationLookupConfigured && <SavedReservationLookup />}
       <p className="text-sm text-[var(--text-secondary)]">Un resultado favorable no autoriza activar el piloto. Aún se debe verificar el proyecto, el SHA esperado, las restricciones y el procedimiento de recuperación. Esta pantalla no aplica migraciones ni modifica banderas.</p>
     </main>
   );

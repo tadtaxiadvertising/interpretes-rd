@@ -12,6 +12,7 @@ vi.mock('next/link', () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
 }));
 import CreationReadinessPage from './page';
+import { DIRECT_UPLOAD_FORM_FLAGS, OPENING_ASSIGNMENT_FLAGS } from '@/lib/roleplay/direct-upload-pilot-config';
 
 async function view(check?: string | string[]) {
   return renderToStaticMarkup(await CreationReadinessPage({ searchParams: Promise.resolve({ check }) }));
@@ -29,6 +30,23 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe('admin runtime diagnostic', () => {
+  it('shows only configuration states for direct uploads, without a runtime probe or secret values', async () => {
+    for (const name of [...OPENING_ASSIGNMENT_FLAGS, ...DIRECT_UPLOAD_FORM_FLAGS]) vi.stubEnv(name, 'true');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'synthetic-project-value');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'synthetic-browser-value');
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'synthetic-server-value');
+    vi.stubEnv('FRONTEND_ORIGIN', 'synthetic-origin-value');
+    const html = await view();
+    expect(html).toContain('Banderas de subida directa configuradas');
+    expect(html).toContain('Ver requisitos de configuración');
+    expect(html).toContain('SUPABASE_SERVICE_ROLE_KEY');
+    expect(html).not.toContain('synthetic-');
+    expect(html).toContain('No verifica las credenciales');
+    expect(mocks.readiness).not.toHaveBeenCalled();
+    vi.stubEnv('ROLEPLAY_DIRECT_UPLOAD_FORM_ENABLED', 'false');
+    expect(await view()).toContain('Subida directa no configurada por completo');
+    expect(await view()).toContain('Consultar una reserva guardada');
+  });
   it('only exposes saved reservation lookup to authorized admins while the reservation API is enabled', async () => {
     expect(await view()).not.toContain('Consultar una reserva guardada');
     vi.stubEnv('ROLEPLAY_DIRECT_UPLOAD_RESERVATION_API_ENABLED', 'true');
@@ -42,6 +60,7 @@ describe('admin runtime diagnostic', () => {
     const html = await view('1');
     expect(html).toContain('Acceso restringido');
     expect(html).not.toContain('Solo consulta de recibos');
+    expect(html).not.toContain('Subida directa de audios');
     expect(html).not.toContain('Conserva la recuperación');
     expect(html).not.toContain('Contrasta el SHA');
     expect(html).not.toContain('Evidencia de comprobación');
