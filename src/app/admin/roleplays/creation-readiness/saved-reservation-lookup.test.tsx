@@ -8,6 +8,27 @@ const key = '123e4567-e89b-42d3-a456-426614174000';
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('saved direct reservation lookup', () => {
+  it.each(['session-confirmed', '../external', 'https://external.example', undefined])(
+    'offers only a safe confirmed administrative session link (%s)', async sessionId => {
+      const fetcher = vi.fn().mockResolvedValue(Response.json({ success: true, data: {
+        status: 'PUBLICATION_CONFIRMED', sessionId,
+      } }));
+      vi.stubGlobal('fetch', fetcher);
+      render(<SavedReservationLookup />);
+      fireEvent.change(screen.getByLabelText('Referencia de la reserva directa guardada'), { target: { value: key } });
+      fireEvent.click(screen.getByRole('button', { name: 'Consultar reserva guardada' }));
+      if (sessionId === 'session-confirmed') {
+        const link = await screen.findByRole('link', { name: 'Ver roleplay confirmado (nueva pestaña)' });
+        expect(link.getAttribute('href')).toBe('/admin/roleplays/session-confirmed');
+        expect(link.getAttribute('target')).toBe('_blank');
+      } else {
+        await screen.findByText(/El registro requiere revisión administrativa/);
+        expect(screen.queryByRole('link', { name: /Ver roleplay confirmado/ })).toBeNull();
+      }
+      expect(fetcher).toHaveBeenCalledOnce();
+    },
+  );
+
   it.each([false, true])('shows verified progress and a dated expiry snapshot (expired=%s)', async expired => {
     const observedAt = '2026-11-28T03:00:00.000Z';
     const expiresAt = expired ? '2026-11-28T02:59:00.000Z' : '2026-11-28T03:04:30.000Z';

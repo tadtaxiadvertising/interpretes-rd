@@ -2,17 +2,20 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 const m = vi.hoisted(() => ({
-  findUnique: vi.fn(), actor: vi.fn(), ip: vi.fn(), quota: vi.fn(),
+  findUnique: vi.fn(), session: vi.fn(), queryRaw: vi.fn(), actor: vi.fn(), ip: vi.fn(), quota: vi.fn(),
 }));
 vi.mock('@/lib/prisma', () => ({
-  default: { roleplayUploadReservation: { findUnique: m.findUnique } },
+  default: { roleplayUploadReservation: { findUnique: m.findUnique }, roleplaySession: { findUnique: m.session }, $queryRaw: m.queryRaw },
 }));
 vi.mock('@/lib/roleplay/creation-actor', () => ({ resolveRoleplayCreationActor: m.actor }));
 vi.mock('@/lib/security/rate-limit', () => ({
   applyRateLimit: m.ip, rateLimit: m.quota, createRateLimitHeaders: () => ({ 'Retry-After': '60' }),
 }));
 
+vi.mock('server-only', () => ({}));
 import { POST } from './route';
+import { makePrivateClinicalReference } from '@/lib/roleplay/private-clinical-reference';
+import { fingerprintDirectInterpreterAssignment } from '@/lib/roleplay/direct-upload-assignment-binding';
 import { prepareRoleplayDirectUploadBatch } from '@/lib/roleplay/direct-upload-contract';
 import { fingerprintRoleplayDirectUploadDeclarations } from '@/lib/roleplay/direct-upload-reservation-fingerprint';
 const key = '123e4567-e89b-42d3-a456-426614174000';
@@ -71,11 +74,50 @@ describe('direct reservation ledger status API', () => {
           expiresAt: row.expiresAt.toISOString(), observedAt: new Date(now).toISOString() }
       : undefined;
     expect(await res.json()).toEqual({ success: true, data: { status: expected, ...(progress ? { progress } : {}) } });
-    expect(m.findUnique).toHaveBeenCalledExactlyOnceWith({
+    expect(m.findUnique).toHaveBeenCalledTimes(status === 'PUBLISHED' ? 2 : 1);
+    expect(m.findUnique).toHaveBeenNthCalledWith(1, {
       where: { actorUserId_requestKey: { actorUserId: 'admin-a', requestKey: key } },
       select: statusSelect,
     });
   });
+
+  it.each(['valid', 'missing-session', 'changed-assignment', 'wrong-audio', 'draft', 'wrong-owner', 'multiple-sessions', 'missing-opening'] as const)(
+    'only exposes a link for a matching published receipt (%s)', async kind => {
+      vi.useFakeTimers();
+      vi.setSystemTime(now);
+      const sessionId = 'session-confirmed';
+      const row = { ...ledger('VERIFIED', true), status: 'PUBLISHED',
+        actorUserId: 'admin-a', requestKey: key, publishedSessionIds: [sessionId] };
+      const assignment = { interpreterId: 7, scenarios: items.map((_, order) => ({
+        title: 'Scenario ' + order, durationLimitSec: 60, scriptPrompt: null,
+        studioLanguage: 'en', studioTurn: null, studioSpeaker: null, sourceStartSec: null, sourceEndSec: null,
+      })) };
+      const references = items.map(({ order }) => makePrivateClinicalReference(batchId, order, 'mp3'));
+      const session = { id: sessionId, status: 'INVITED', interpreterId: 7, recruitmentCandidateId: null,
+        baseAudioPath: references[0], baseAudioUrl: references[0],
+        scenarios: assignment.scenarios.map((s, order) => ({ ...s, order, baseAudioUrl: references[order] })),
+      };
+      const hash = fingerprintDirectInterpreterAssignment(assignment);
+      if (kind === 'wrong-owner') row.actorUserId = 'admin-b';
+      if (kind === 'multiple-sessions') row.publishedSessionIds.push('another-session');
+      if (kind === 'changed-assignment') session.scenarios[0].title = 'Changed';
+      if (kind === 'wrong-audio') session.scenarios[0].baseAudioUrl = 'private-wrong';
+      if (kind === 'draft') session.status = 'DRAFT';
+      m.findUnique.mockResolvedValue(row);
+      m.session.mockResolvedValue(kind === 'missing-session' ? null : session);
+      m.queryRaw.mockImplementation(async (_sql: TemplateStringsArray, ...values: unknown[]) => {
+        if (values.includes(hash)) return [{ matched: true }];
+        if (values.length === 1 && values[0] === sessionId) return [{ required: kind !== 'missing-opening' }];
+        return [];
+      });
+      const res = await call();
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ success: true, data: kind === 'valid'
+        ? { status: 'PUBLICATION_CONFIRMED', sessionId } : { status: 'PUBLICATION_RECORDED' } });
+      if (kind === 'wrong-owner' || kind === 'multiple-sessions') expect(m.session).not.toHaveBeenCalled();
+      if (kind === 'valid') expect(m.queryRaw.mock.calls[0].slice(1)).toEqual([batchId, 'admin-a', key, hash]);
+    },
+  );
 
   it.each(['wrong-count', 'wrong-digest', 'wrong-order', 'invalid-expiry', 'invalid-evidence'] as const)(
     'does not report progress for an inconsistent ledger (%s)', async kind => {

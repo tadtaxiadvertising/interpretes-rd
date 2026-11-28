@@ -13,6 +13,7 @@ export const directReservationObservationLabels: Record<DirectReservationObserva
   RESERVED: 'La reserva figura como registrada. No confirma la presencia ni la integridad de los audios.',
   VERIFIED: 'El registro indica que los audios fueron verificados. No confirma su publicación ni su disponibilidad actual.',
   EXPIRED: 'La reserva ha caducado. Solicita una revisión antes de iniciar otra creación.',
+  PUBLICATION_CONFIRMED: 'La publicación registrada corresponde a una sesión existente según la consulta. No confirma la disponibilidad actual de los audios.',
   PUBLICATION_RECORDED: 'El registro indica una publicación. Consulta las sesiones existentes para comprobar si sigue disponible.',
   CANCELLED: 'El registro indica una reserva cancelada. Solicita una revisión antes de iniciar otra creación.',
   REVIEW_REQUIRED: 'El registro requiere revisión administrativa.',
@@ -24,6 +25,7 @@ export const directReservationObservationLabels: Record<DirectReservationObserva
 export type DirectReservationObservationResult = {
   status: DirectReservationObservation;
   progress?: DirectReservationRecordedProgress;
+  sessionId?: string;
 };
 
 function validatedProgress(status: DirectReservationStatus, value: unknown): DirectReservationRecordedProgress | undefined {
@@ -43,7 +45,7 @@ function validatedProgress(status: DirectReservationStatus, value: unknown): Dir
 }
 
 const states: readonly DirectReservationStatus[] = [
-  'NOT_FOUND', 'RESERVED', 'VERIFIED', 'EXPIRED', 'PUBLICATION_RECORDED', 'CANCELLED', 'REVIEW_REQUIRED',
+  'NOT_FOUND', 'RESERVED', 'VERIFIED', 'EXPIRED', 'PUBLICATION_RECORDED', 'PUBLICATION_CONFIRMED', 'CANCELLED', 'REVIEW_REQUIRED',
 ];
 
 /** This observation cannot authorize any upload, signing or publication. */
@@ -65,6 +67,12 @@ export async function observeDirectReservation(requestKey: string, fetcher: type
       const status: unknown = body?.success === true ? body.data?.status : null;
       if (!states.includes(status as DirectReservationStatus)) return { status: 'UNAVAILABLE' };
       const observedStatus = status as DirectReservationStatus;
+      if (observedStatus === 'PUBLICATION_CONFIRMED') {
+        const sessionId: unknown = body.data.sessionId;
+        return typeof sessionId === 'string' && /^[a-zA-Z0-9_-]{5,120}$/.test(sessionId)
+          ? { status: observedStatus, sessionId }
+          : { status: 'REVIEW_REQUIRED' };
+      }
       const progress = validatedProgress(observedStatus, body.data.progress);
       return { status: observedStatus, ...(progress ? { progress } : {}) };
     } catch { return { status: 'UNAVAILABLE' }; }
