@@ -79,6 +79,49 @@ describe('gated creation receipt recovery form', () => {
     expect(screen.queryByRole('button', { name: 'Consultar resultado sin reenviar audios' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Crear roleplay' })).toHaveProperty('disabled', true);
   });
+  it.each([undefined, '', '../session', 'https://external.example', 'a'.repeat(129)])(
+    'preserves keyed recovery when a nominal success has an invalid session ID (%s)',
+    async sessionId => {
+      vi.stubGlobal('crypto', { randomUUID: vi.fn(() => key) });
+      const fetcher = vi.fn()
+        .mockResolvedValueOnce(Response.json({ success: true, data: {
+          sessionId, scenarioCount: 1, inviteLink: window.location.origin + '/roleplays/session-123',
+        } }))
+        .mockResolvedValueOnce(Response.json({ success: true, data: complete }));
+      vi.stubGlobal('fetch', fetcher);
+      render(<NewRoleplayForm interpreters={[{id:11,name:'Intérprete sintético'}]} candidates={[]} creationRecoveryEnabled/>);
+      fireEvent.change(screen.getByLabelText(/Destinatario ·/), { target: { value: '11' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Preparar escenario' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Crear roleplay' }));
+      const check = await screen.findByRole('button', { name: 'Consultar resultado sin reenviar audios' });
+      expect(screen.queryByText('¡Roleplay creado correctamente!')).toBeNull();
+      expect(screen.getByLabelText('Referencia del intento')).toHaveProperty('value', 'rp1:' + key + ':1');
+      expect(screen.getByRole('button', { name: 'Crear roleplay' })).toHaveProperty('disabled', true);
+      fireEvent.click(check);
+      await screen.findByText(/Creación confirmada mediante el recibo/);
+      expect(screen.getByRole('link', { name: 'Ver roleplay recuperado' }).getAttribute('href')).toBe('/admin/roleplays/session-123');
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      expect(fetcher.mock.calls[1][0]).toBe('/api/admin/roleplays/creation-receipt');
+      expect(fetcher.mock.calls[1][1].body).toBe(JSON.stringify({ requestKey: key }));
+    },
+  );
+
+  it('accepts a coherent keyed creation without requiring a receipt lookup', async () => {
+    vi.stubGlobal('crypto', { randomUUID: vi.fn(() => key) });
+    const fetcher = vi.fn().mockResolvedValue(Response.json({ success: true, data: {
+      sessionId: 'session-123', scenarioCount: 1, inviteLink: window.location.origin + '/roleplays/session-123',
+    } }));
+    vi.stubGlobal('fetch', fetcher);
+    render(<NewRoleplayForm interpreters={[{id:11,name:'Intérprete sintético'}]} candidates={[]} creationRecoveryEnabled/>);
+    fireEvent.change(screen.getByLabelText(/Destinatario ·/), { target: { value: '11' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Preparar escenario' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Crear roleplay' }));
+    await screen.findByText('¡Roleplay creado correctamente!');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0][1].headers).toEqual({ 'Idempotency-Key': key });
+    expect(screen.queryByLabelText('Referencia del intento')).toBeNull();
+  });
+
   it.each([true, false])('restores a saved reference with new keyed creation enabled=%s', async creationRecoveryEnabled => {
     const fetcher = vi.fn().mockResolvedValue(Response.json({ success: true, data: complete }));
     vi.stubGlobal('fetch', fetcher);

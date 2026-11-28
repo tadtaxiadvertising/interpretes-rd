@@ -11,7 +11,7 @@ import { inspectRoleplayAdminAudioDraft } from '@/lib/roleplay/browser-audio-pre
 import { extractStudioZip } from '@/lib/roleplay-studio/zip';
 import { advanceProductionTransfer } from '@/lib/roleplay-studio/production-tracking';
 import { confirmRoleplayCreationRetry } from '@/lib/roleplay/creation-retry-guard';
-import { formatCreationRecoveryReference, parseCreationRecoveryReference, recoverSingleRoleplayCreation, type SingleCreationRecovery } from '@/lib/roleplay/creation-receipt-browser';
+import { formatCreationRecoveryReference, isConfirmedRoleplaySessionId, parseCreationRecoveryReference, recoverSingleRoleplayCreation, type SingleCreationRecovery } from '@/lib/roleplay/creation-receipt-browser';
 import { peekStudioHandoff, peekLocalWavHandoff, clearStudioHandoff } from '@/lib/roleplay-studio/assignment-handoff';
 import { extractExternalStudioZip } from '@/lib/roleplay-studio/external-zip';
 import { createDirectRoleplayFormController, type FormProgress } from '@/lib/roleplay/direct-upload-form-controller';
@@ -683,7 +683,10 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         throw new Error(unknownResultMessage);
       }
 
-      if (keyedAttempt.current && (!validSingle || payload.scenarioCount !== keyedAttempt.current.scenarioCount)) {
+      // A keyed publication must identify the same kind of session as its receipt.
+      // A link alone is not sufficient evidence to discard the original key.
+      if (keyedAttempt.current && (!validSingle || !isConfirmedRoleplaySessionId(payload.sessionId) ||
+          payload.scenarioCount !== keyedAttempt.current.scenarioCount)) {
         setSubmissionUncertain(true);
         throw new Error(unknownResultMessage);
       }
