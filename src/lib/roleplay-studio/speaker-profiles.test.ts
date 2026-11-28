@@ -25,6 +25,16 @@ describe('Studio three-party speaker review with bilingual role labels', () => {
     expect(safePublishableSpeakerLabel('Dr. Ana Pérez')).toBeNull();
   });
 
+  it('recognizes the generic Audio Studio profile labels without identifying names', () => {
+    expect(classifySpeakerRole(' Cliente ')).toBe('doctor');
+    expect(classifySpeakerRole('Client')).toBe('doctor');
+    expect(classifySpeakerRole('Hispanohablante')).toBe('patient');
+    expect(classifySpeakerRole('Spanish speaker')).toBe('patient');
+    expect(classifySpeakerRole('Cliente Juan')).toBe('unknown');
+    expect(safePublishableSpeakerLabel('Cliente Juan')).toBeNull();
+    expect(safePublishableSpeakerLabel('Spanish speaker')).toBe('Hispanohablante');
+  });
+
   it('selects bilingual dialogue while omitting only the original interpreter', () => {
     const cues = [
       { speaker: 'Doctor', start: 1, end: 2, text: 'Private English medical dialogue' },
