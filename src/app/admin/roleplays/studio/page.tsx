@@ -12,7 +12,7 @@ import {
   type TimedTranscriptCue,
 } from '@/lib/roleplay-studio/transcript';
 import { fillCompatibleTimedCueSelection, selectTimedCues, suggestRepresentativeTimedCueSelection } from '@/lib/roleplay-studio/cue-selection';
-import { conflictingSelectedTimedCueIndices, cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, proposeSelectedCueEdgeTrim, summarizeTimedCueReview } from '@/lib/roleplay-studio/cue-review-summary';
+import { conflictingSelectedTimedCueIndices, cueTrimActivityHint, cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, proposeSelectedCueEdgeTrim, summarizeTimedCueReview } from '@/lib/roleplay-studio/cue-review-summary';
 import { availableStudioInterval } from '@/lib/roleplay-studio/available-interval';
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
 import { proposeStudioBoundaries } from '@/lib/roleplay-studio/boundary-proposals';
@@ -664,7 +664,9 @@ export default function RoleplayStudioPage() {
   const applyCueEdgeTrim = (index: number) => {
     const proposal = proposeSelectedCueEdgeTrim(reviewCues, chosenCueIndices, index, duration);
     if (!proposal) return;
+    const activity = cueTrimActivityHint(reviewCues[index], proposal, localVadSnapshot);
     if (!window.confirm(
+      (activity === 'detected' ? 'Atención: la parte retirada coincide con una región de actividad acústica local. ' : '') +
       'Este ajuste de tiempos no conoce los límites de las palabras. ' +
       'Escucha el fragmento propuesto antes de confirmar. Se conservarán ambos turnos y el archivo original. ¿Aplicar ajuste?',
     )) return;
@@ -2743,6 +2745,7 @@ export default function RoleplayStudioPage() {
                 ? conflictingSelectedTimedCueIndices(reviewCues, chosenCueIndices, index) : [];
               const trim = conflicts.length === 1
                 ? proposeSelectedCueEdgeTrim(reviewCues, chosenCueIndices, index, duration) : null;
+              const trimActivity = trim ? cueTrimActivityHint(cue, trim, localVadSnapshot) : 'unavailable';
               return (
               <div key={index} className="flex items-start gap-3 rounded-lg border border-[var(--border)] p-2">
                 <input type="checkbox" checked={chosenCueIndices.includes(index)}
@@ -2768,6 +2771,13 @@ export default function RoleplayStudioPage() {
                   {trim && (
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
                       <span>Ajuste propuesto: {trim.start.toFixed(3)}–{trim.end.toFixed(3)} s. No identifica palabras.</span>
+                      <span className={trimActivity === 'detected' ? 'basis-full font-semibold text-[var(--theme-warning)]' : 'basis-full'}>
+                        {trimActivity === 'detected'
+                          ? 'La parte retirada coincide con actividad acústica detectada. Escucha con especial atención.'
+                          : trimActivity === 'not-detected'
+                            ? 'Sin coincidencia con las regiones detectadas; esto no garantiza silencio.'
+                            : 'Sin información acústica suficiente para valorar este ajuste.'}
+                      </span>
                       <button type="button" onClick={() => previewSubtitleCue({ ...cue, ...trim }, index, true)}
                         aria-pressed={previewingId === `subtitle-trim-${index}`}
                         className="rounded border border-[var(--border)] px-2 py-1 text-[var(--theme-link)]">
