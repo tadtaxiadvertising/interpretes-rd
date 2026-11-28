@@ -67,6 +67,13 @@ describe('Admin roleplay library protects server error logs', () => {
     expect(serialized).toContain('/admin/roleplays/new?sourceSessionId=legacy-template');
     expect(serialized.includes('/admin/roleplays/new?sourceSessionId=private-template')).toBe(enabled);
     expect(serialized.includes('Asignación privada no habilitada')).toBe(!enabled);
+  it('handles repeated URL query parameters without crashing', async () => {
+    vi.mocked(prisma.roleplaySession.findMany).mockResolvedValueOnce([]);
+    const page = await RoleplayLibraryPage({ searchParams: Promise.resolve({
+      q: ['consulta', 'farmacia'], topic: ['medical', 'finance'], archived: ['1','0'],
+    }) });
+    expect(page).toBeTruthy();
+    expect(prisma.roleplaySession.findMany).toHaveBeenCalledOnce();
   });
 
   it('also redacts arbitrary non-Error rejection payloads', async () => {
