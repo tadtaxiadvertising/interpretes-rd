@@ -14,25 +14,15 @@ vi.mock('@/lib/auth/actions', () => ({
 vi.mock('@/lib/api-auth', () => ({
   actorFromBearer: vi.fn(),
 }));
-vi.mock('@/lib/roleplay-studio/bounded-multipart', () => {
-  class MultipartBodyTooLargeError extends Error {
-    constructor() {
-      super('MULTIPART_BODY_TOO_LARGE');
-      this.name = 'MultipartBodyTooLargeError';
-    }
-  }
-  return {
-    MultipartBodyTooLargeError,
-    readBoundedMultipartFormData: vi.fn(async () => {
-      throw new MultipartBodyTooLargeError();
-    }),
-  };
-});
+vi.mock(import('@/lib/roleplay-studio/bounded-multipart'), async importOriginal => ({
+  ...await importOriginal(),
+  readBoundedMultipartFormData: vi.fn(),
+}));
 
 import { POST } from '../route';
 import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
-import { readBoundedMultipartFormData } from '@/lib/roleplay-studio/bounded-multipart';
+import { MultipartBodyIdleTimeoutError, MultipartBodyTooLargeError, readBoundedMultipartFormData } from '@/lib/roleplay-studio/bounded-multipart';
 
 function request(): Request {
   const form = new FormData();
@@ -45,6 +35,7 @@ function request(): Request {
 describe('roleplay admin multipart cap is enforced before database or Storage writes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(readBoundedMultipartFormData).mockReset().mockRejectedValue(new MultipartBodyTooLargeError());
     vi.mocked(validateAction).mockResolvedValue({
       user: { userId: 'test-admin', role: 'admin' },
     } as never);
@@ -55,6 +46,17 @@ describe('roleplay admin multipart cap is enforced before database or Storage wr
     expect(result.status).toBe(413);
     expect(result.headers.get('Cache-Control')).toBe('private, no-store');
     expect((await result.json()).error).toContain('lote de audio');
+    expect(readBoundedMultipartFormData).toHaveBeenCalledOnce();
+    expect(prisma.interpreter.findMany).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('maps streaming inactivity to private HTTP 408 without side effects', async () => {
+    vi.mocked(readBoundedMultipartFormData).mockRejectedValueOnce(new MultipartBodyIdleTimeoutError());
+    const result = await POST(request() as never);
+    expect(result.status).toBe(408);
+    expect(result.headers.get('Cache-Control')).toBe('private, no-store');
+    expect((await result.json()).error).toContain('inactividad');
     expect(readBoundedMultipartFormData).toHaveBeenCalledOnce();
     expect(prisma.interpreter.findMany).not.toHaveBeenCalled();
     expect(prisma.$transaction).not.toHaveBeenCalled();
