@@ -81,6 +81,36 @@ describe('Admin roleplay library protects server error logs', () => {
     expect(labels.some(label => label.includes('Asignación privada no habilitada'))).toBe(!enabled);
   });
 
+  it('paginates the filtered catalog and preserves filters on page links without prefetch', async () => {
+    vi.stubEnv('ROLEPLAY_LIBRARY_EDITORIAL_TOPICS_ENABLED', 'false');
+    const sessions = Array.from({ length: 25 }, (_, i) => ({
+      id: 'fixture-' + i, status: 'INVITED', createdAt: new Date(1000 - i),
+      scenarios: [{ id: 'scenario-' + i, order: 1, title: 'Consulta médica ' + i,
+        baseAudioUrl: 'https://storage.invalid/storage/v1/object/public/roleplay-audio/base/fixture-' + i + '.mp3',
+        durationLimitSec: 120, scriptPrompt: null, studioTurn: null, studioSpeaker: null,
+        studioLanguage: null, sourceStartSec: null, sourceEndSec: null, expectedKeys: [] }],
+    }));
+    vi.mocked(prisma.roleplaySession.findMany).mockResolvedValueOnce(sessions as unknown as Awaited<ReturnType<typeof prisma.roleplaySession.findMany>>);
+    vi.mocked(prisma.roleplayLibraryArchive.findMany).mockResolvedValueOnce([]);
+    const page = await RoleplayLibraryPage({ searchParams: Promise.resolve({
+      q: 'consulta', topic: 'medical', subtopic: 'consultation', size: 'single', page: '2',
+    }) });
+    const links: Array<{ href: string; prefetch?: boolean }> = [];
+    const visit = (node: ReactNode): void => {
+      if (Array.isArray(node)) { node.forEach(visit); return; }
+      if (!isValidElement<{ children?: ReactNode; href?: string; prefetch?: boolean }>(node)) return;
+      if (typeof node.props.href === 'string') links.push({href:node.props.href,prefetch:node.props.prefetch});
+      visit(node.props.children);
+    };
+    visit(page);
+    const previews = links.filter(link => link.href.startsWith('/admin/roleplays/library/fixture-'));
+    expect(previews.map(link => link.href)).toEqual(sessions.slice(12,24).map(item => '/admin/roleplays/library/' + item.id));
+    expect(links).toContainEqual({href:'/admin/roleplays/library?q=consulta&size=single&page=3&topic=medical&subtopic=consultation',prefetch:false});
+    expect(links).toContainEqual({href:'/admin/roleplays/library?q=consulta&size=single&topic=medical&subtopic=consultation',prefetch:false});
+    expect(prisma.roleplaySession.findMany).toHaveBeenCalledOnce();
+    expect(prisma.roleplayLibraryArchive.findMany).toHaveBeenCalledOnce();
+  });
+
   it('handles repeated URL query parameters without crashing', async () => {
     vi.mocked(prisma.roleplaySession.findMany).mockResolvedValueOnce([]);
     const page = await RoleplayLibraryPage({ searchParams: Promise.resolve({
