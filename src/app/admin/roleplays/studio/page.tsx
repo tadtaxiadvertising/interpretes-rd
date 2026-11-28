@@ -3067,36 +3067,54 @@ export default function RoleplayStudioPage() {
               })}
             </div>
           </section>}
-          <details open={!focusMode} className="space-y-3 rounded-lg border border-[var(--border)] p-2">
-            <summary className="cursor-pointer text-sm font-semibold text-[var(--foreground)]">Herramientas de clasificación y protocolos</summary>
-          <section aria-label="Flujo de interpretación médica" className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
-            <div>
-              <h3 className="text-sm font-semibold text-[var(--foreground)]">Flujo médico bilingüe</h3>
-              <p className="mt-1 text-xs text-[var(--text-secondary)]">El participante inicia con el protocolo en ambos idiomas. Conserva las voces del médico y paciente; el nuevo intérprete realiza las traducciones.</p>
-            </div>
-            <ol className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-5">
-              {[
-                ['Apertura · EN + ES', 'Intérprete participante'],
-                ['Médico · EN', 'Conservar audio'],
-                ['Interpretación · ES', 'Respuesta del participante'],
-                ['Paciente · ES', 'Conservar audio'],
-                ['Interpretación · EN', 'Respuesta del participante'],
-              ].map(([title, detail]) => (
-                <li key={title} className="rounded-lg border border-[var(--border)] bg-[var(--theme-panel)] p-2">
-                  <span className="block font-semibold text-[var(--foreground)]">{title}</span>
-                  <span className="mt-1 block text-[var(--text-secondary)]">{detail}</span>
-                </li>
-              ))}
-            </ol>
-            <p className="text-xs text-[var(--text-secondary)]">Repite el ciclo según la grabación. Excluye las traducciones y la apertura del intérprete original; no se identifica una voz por su posición en la secuencia.</p>
+          {pendingSpeakerIds.length > 1 && (
+            <section aria-label="Clasificación rápida de perfiles" className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
+              <h3 className="text-sm font-semibold text-[var(--foreground)]">Clasificación rápida</h3>
+              <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-auto text-xs text-[var(--text-secondary)]">
+                {pendingSpeakerIds.length} intervenciones visibles sin hablante. Se respetarán los perfiles revisados y los filtros actuales.
+              </span>
+              <button type="button" disabled={!pendingClientIds.length} onClick={() => setSpeakerForPendingTurns('doctor', pendingClientIds)}
+                className="theme-action-secondary min-h-11 rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-50">
+                Cliente · EN ({pendingClientIds.length})
+              </button>
+              <button type="button" disabled={!pendingSpanishIds.length} onClick={() => setSpeakerForPendingTurns('patient', pendingSpanishIds)}
+                className="theme-action-secondary min-h-11 rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-50">
+                Hispanohablante · ES ({pendingSpanishIds.length})
+              </button>
+              </div>
+              <p className="text-xs text-[var(--text-secondary)]">Solo se asignan turnos sin perfil e idioma compatible. Clasifica al intérprete original individualmente para evitar exclusiones accidentales.</p>
+            </section>
+          )}
+          {(medicalLanguagePendingIds.length > 0 || pendingLanguageIds.length > 1) && (
+            <section aria-label="Idiomas pendientes" className="space-y-2 rounded-lg border border-[var(--border)] p-3">
+              <h3 className="text-sm font-semibold text-[var(--foreground)]">Completar idiomas pendientes</h3>
+              <p className="text-xs text-[var(--text-secondary)]">Para turnos importados o sin idioma confirmado. No modifica los idiomas ya revisados.</p>
             {medicalLanguagePendingIds.length > 0 && (
               <button type="button" onClick={() => applyMedicalLanguagePattern(medicalLanguagePendingIds)}
                 className="rounded-lg theme-action-primary px-3 py-2 text-xs font-semibold">
                 Aplicar médico EN / paciente ES ({medicalLanguagePendingIds.length} pendientes visibles)
               </button>
             )}
-          </section>
-          <details open={!sourceRequiresLocal} className="space-y-3 rounded-lg border border-teal-400/20 bg-teal-400/5 p-3">
+          {pendingLanguageIds.length > 1 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] px-3 py-2">
+              <span className="mr-auto text-xs text-[var(--text-secondary)]">
+                {pendingLanguageIds.length} intervenciones visibles sin idioma. Solo se cambiarán las que aparecen con los filtros actuales.
+              </span>
+              <button type="button" onClick={() => setLanguageForPendingTurns('en', pendingLanguageIds)}
+                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--theme-link)] hover:bg-blue-500/10">
+                Marcar pendientes como inglés
+              </button>
+              <button type="button" onClick={() => setLanguageForPendingTurns('es', pendingLanguageIds)}
+                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--theme-link)] hover:bg-blue-500/10">
+                Marcar pendientes como español
+              </button>
+            </div>
+          )}
+
+            </section>
+          )}
+          <details className="space-y-3 rounded-lg border border-teal-400/20 bg-teal-400/5 p-3">
             <summary className="cursor-pointer text-sm font-semibold text-[var(--theme-info)]">
               Protocolos de interpretación consecutiva (opcional)
             </summary>
@@ -3126,37 +3144,30 @@ export default function RoleplayStudioPage() {
               </label>
             </div>
           </details>
-          {pendingSpeakerIds.length > 1 && (
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] px-3 py-2">
-              <span className="mr-auto text-xs text-[var(--text-secondary)]">
-                {pendingSpeakerIds.length} intervenciones visibles sin hablante. Se respetarán los perfiles revisados y los filtros actuales.
-              </span>
-              <button type="button" disabled={!pendingClientIds.length} onClick={() => setSpeakerForPendingTurns('doctor', pendingClientIds)}
-                className="theme-action-secondary rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-50">
-                Cliente · EN ({pendingClientIds.length})
-              </button>
-              <button type="button" disabled={!pendingSpanishIds.length} onClick={() => setSpeakerForPendingTurns('patient', pendingSpanishIds)}
-                className="theme-action-secondary rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-50">
-                Hispanohablante · ES ({pendingSpanishIds.length})
-              </button>
-              <p className="w-full text-xs text-[var(--text-secondary)]">Solo se asignan turnos sin perfil e idioma compatible. Clasifica al intérprete original individualmente para evitar exclusiones accidentales.</p>
+          <details className="space-y-3 rounded-lg border border-[var(--border)] p-2">
+            <summary className="cursor-pointer text-sm font-semibold text-[var(--foreground)]">Guía de interpretación y ayuda de clasificación</summary>
+          <section aria-label="Flujo de interpretación médica" className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
+            <div>
+              <h3 className="text-sm font-semibold text-[var(--foreground)]">Flujo médico bilingüe</h3>
+              <p className="mt-1 text-xs text-[var(--text-secondary)]">El participante inicia con el protocolo en ambos idiomas. Conserva las voces del médico y paciente; el nuevo intérprete realiza las traducciones.</p>
             </div>
-          )}
-          {pendingLanguageIds.length > 1 && (
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] px-3 py-2">
-              <span className="mr-auto text-xs text-[var(--text-secondary)]">
-                {pendingLanguageIds.length} intervenciones visibles sin idioma. Solo se cambiarán las que aparecen con los filtros actuales.
-              </span>
-              <button type="button" onClick={() => setLanguageForPendingTurns('en', pendingLanguageIds)}
-                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--theme-link)] hover:bg-blue-500/10">
-                Marcar pendientes como inglés
-              </button>
-              <button type="button" onClick={() => setLanguageForPendingTurns('es', pendingLanguageIds)}
-                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--theme-link)] hover:bg-blue-500/10">
-                Marcar pendientes como español
-              </button>
-            </div>
-          )}
+            <ol className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-5">
+              {[
+                ['Apertura · EN + ES', 'Intérprete participante'],
+                ['Médico · EN', 'Conservar audio'],
+                ['Interpretación · ES', 'Respuesta del participante'],
+                ['Paciente · ES', 'Conservar audio'],
+                ['Interpretación · EN', 'Respuesta del participante'],
+              ].map(([title, detail]) => (
+                <li key={title} className="rounded-lg border border-[var(--border)] bg-[var(--theme-panel)] p-2">
+                  <span className="block font-semibold text-[var(--foreground)]">{title}</span>
+                  <span className="mt-1 block text-[var(--text-secondary)]">{detail}</span>
+                </li>
+              ))}
+            </ol>
+            <p className="text-xs text-[var(--text-secondary)]">Repite el ciclo según la grabación. Excluye las traducciones y la apertura del intérprete original; no se identifica una voz por su posición en la secuencia.</p>
+
+          </section>
           </details>
           {originalInterpreterCount > 0 && (
             <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-xs text-[var(--theme-warning)]">

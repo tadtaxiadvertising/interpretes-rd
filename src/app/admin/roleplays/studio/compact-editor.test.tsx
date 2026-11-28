@@ -469,6 +469,26 @@ describe('Audio Studio compact editing', () => {
     expect(screen.getByRole('button', { name: 'Marcar pendientes como español' })).toBeTruthy();
   });
 
+  it('keeps quick classification visible independently of optional guides and protocols', () => {
+    loadAudio(120);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    const quick = screen.getByRole('region', { name: 'Clasificación rápida de perfiles' });
+    expect(quick.closest('details')).toBeNull();
+    expect(within(quick).getByRole('button', { name: 'Cliente · EN (2)' })).toBeTruthy();
+    const guide = screen.getByText('Guía de interpretación y ayuda de clasificación').closest('details');
+    const protocol = screen.getByText('Protocolos de interpretación consecutiva (opcional)').closest('details');
+    expect(guide?.open).toBe(false);
+    expect(protocol?.open).toBe(false);
+    expect(guide).not.toBe(protocol);
+    const pending = screen.getByRole('region', { name: 'Idiomas pendientes' });
+    expect(pending.closest('details')).toBeNull();
+    fireEvent.click(within(quick).getByRole('button', { name: 'Cliente · EN (2)' }));
+    expect(screen.queryByRole('region', { name: 'Clasificación rápida de perfiles' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Idiomas pendientes' })).toBeNull();
+    expect(displayedLanguages()).toEqual(['en', 'en']);
+  });
+
   it('assigns profile and language in bulk only to visible compatible pending turns and undoes both', () => {
     loadAudio(180);
     for (let i = 0; i < 4; i++) fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
