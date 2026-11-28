@@ -796,19 +796,20 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       {receiptRecoveryEnabled && keyedStatus === null && !directLocked && (
         <details className="rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
           <summary className="cursor-pointer font-semibold text-sm text-[var(--foreground)]">Recuperar una creación anterior</summary>
-          <div className="mt-3 space-y-2">
+          <form className="mt-3 space-y-2" onSubmit={event => { event.preventDefault(); if (recoveryInput.trim()) restoreCreationReference(); }}>
             {!creationRecoveryEnabled && <p role="status" className="text-sm text-[var(--theme-warning)]">La creación con clave está pausada. Puedes consultar recibos anteriores, pero las nuevas creaciones utilizan el flujo tradicional.</p>}
             <p className="text-sm text-[var(--text-secondary)]">Si guardaste una referencia, puedes consultar el resultado con la misma cuenta de administrador. No se enviarán audios. El borrador actual quedará bloqueado mientras revisas el intento.</p>
             <label htmlFor="roleplay-recovery-reference" className="block text-sm font-medium text-[var(--foreground)]">Referencia de recuperación</label>
             <input id="roleplay-recovery-reference" type="text" value={recoveryInput}
               onChange={event => { setRecoveryInput(event.target.value); setRecoveryInputError(null); }}
-              maxLength={80} autoComplete="off" spellCheck={false} disabled={isCreating || isImporting}
+              maxLength={80} autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="go" disabled={isCreating || isImporting}
               aria-invalid={Boolean(recoveryInputError)}
+              aria-describedby={recoveryInputError ? "roleplay-recovery-reference-error" : undefined}
               className="min-h-11 w-full rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-3 text-sm text-[var(--theme-control-text)]"/>
-            {recoveryInputError && <p role="alert" className="text-sm text-[var(--theme-danger)]">{recoveryInputError}</p>}
-            <button type="button" onClick={restoreCreationReference} disabled={isCreating || isImporting || !recoveryInput.trim()}
+            {recoveryInputError && <p id="roleplay-recovery-reference-error" role="alert" className="text-sm text-[var(--theme-danger)]">{recoveryInputError}</p>}
+            <button type="submit" disabled={isCreating || isImporting || !recoveryInput.trim()}
               className="min-h-11 w-full rounded-xl theme-action-secondary px-3 py-2 text-sm font-semibold disabled:opacity-50 sm:w-auto">Recuperar intento anterior</button>
-          </div>
+          </form>
         </details>
       )}
       <fieldset disabled={directLocked || keyedStatus !== null} className="min-w-0 space-y-5">
