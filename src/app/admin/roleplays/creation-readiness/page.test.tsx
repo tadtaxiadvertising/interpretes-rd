@@ -27,7 +27,7 @@ beforeEach(() => {
   vi.stubEnv('ROLEPLAY_DIRECT_UPLOAD_RESERVATION_API_ENABLED', 'false');
   mocks.validate.mockResolvedValue({ user: { role: 'admin' } });
   mocks.readiness.mockResolvedValue(true);
-  mocks.directCatalog.mockResolvedValue({ reservation: 'catalog-ready', budget: 'accounting-consistent', capacity: { maxSlots: 25, allocatedSlots: 10, remainingSlots: 15 } });
+  mocks.directCatalog.mockResolvedValue({ reservation: 'catalog-ready', budget: 'accounting-consistent', permissions: { state: 'recognized', tables: [{ name: 'roleplay_upload_reservations', runtimeAccess: true, privateAccess: true }] }, capacity: { maxSlots: 25, allocatedSlots: 10, remainingSlots: 15 } });
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -45,16 +45,20 @@ describe('admin runtime diagnostic', () => {
     expect(mocks.readiness).not.toHaveBeenCalled();
     expect(html).toContain('Estructura reconocida');
     expect(html).toContain('Contabilidad coherente');
+    expect(html).toContain('Permisos reconocidos');
+    expect(html).toContain('Ver permisos por registro interno');
+    expect(html).toContain('roleplay_upload_reservations');
     expect(html).toContain('10 de 25');
     expect(html).toContain('Cupos contables: 10 de 25; restantes: 15');
     expect(html).toContain('no representan espacio libre real');
   });
 
   it('hides capacity when accounting requires review and never probes for unauthorized visitors', async () => {
-    mocks.directCatalog.mockResolvedValue({ reservation: 'catalog-ready', budget: 'review-required', capacity: null });
+    mocks.directCatalog.mockResolvedValue({ reservation: 'catalog-ready', budget: 'review-required', permissions: { state: 'review-required', tables: [{ name: 'roleplay_upload_reservations', runtimeAccess: false, privateAccess: true }] }, capacity: null });
     const html = await view(undefined, '1');
     expect(html).toContain('Requiere revisión');
     expect(html).not.toContain('Cupos contables restantes');
+    expect(html).toContain('Requiere revisión de permisos');
     expect(html).toContain('No se informa capacidad contable utilizable');
     mocks.directCatalog.mockClear();
     mocks.validate.mockResolvedValue({ user: { role: 'interpreter' } });
