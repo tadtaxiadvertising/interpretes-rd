@@ -15,6 +15,10 @@ const ROLE_LABELS: Record<Exclude<StudioSpeakerRole, 'unknown'>, string> = {
 };
 
 const SPEAKER_ALIASES: ReadonlyMap<string, { role: StudioSpeakerRole; label: string }> = new Map([
+  ['client', { role: 'doctor', label: 'Cliente' }],
+  ['cliente', { role: 'doctor', label: 'Cliente' }],
+  ['spanish speaker', { role: 'patient', label: 'Hispanohablante' }],
+  ['hispanohablante', { role: 'patient', label: 'Hispanohablante' }],
   ['doctor', { role: 'doctor', label: 'Doctor' }],
   ['dr', { role: 'doctor', label: 'Doctor' }],
   ['dr.', { role: 'doctor', label: 'Doctor' }],
@@ -71,6 +75,8 @@ export function titleAfterProfileChange(
     title === `Intervención sugerida ${numbered}` ||
     title === `Médico · ${numbered}` ||
     title === `Doctor · ${numbered}` ||
+    title === `Cliente · ${numbered}` ||
+    title === `Hispanohablante · ${numbered}` ||
     title === `Paciente · ${numbered}` ||
     title === `Enfermería · ${numbered}` ||
     title === `Operador · ${numbered}` ||
